@@ -28,6 +28,7 @@ vi.mock("@ton/ton", () => ({
   },
   internal: h.internal,
   toNano: vi.fn((v: string) => BigInt(Math.round(Number(v) * 1e9))),
+  fromNano: vi.fn((v: bigint | string) => (Number(v) / 1e9).toString()),
 }));
 
 import { Fragment } from "../src/Fragment.js";
@@ -66,6 +67,42 @@ describe("ton.wallet.v4r2.send", () => {
     expect(h.internal).toHaveBeenCalledWith(
       expect.objectContaining({ to: "UQdest", body: "50 Telegram Stars", bounce: false }),
     );
+  });
+
+  it("accepts an exact amountNano (no float conversion)", async () => {
+    const client = fundedClient();
+    const res = await client.ton.wallet.v4r2.send({
+      destinationAddress: "UQdest",
+      amountNano: "456100000",
+      payload: "50 Telegram Stars",
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.data.amountNano).toBe("456100000");
+      expect(res.data.amount).toBe(0.4561);
+    }
+    expect(h.internal).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "UQdest", value: 456100000n }),
+    );
+  });
+
+  it("rejects providing both amount and amountNano", async () => {
+    const client = fundedClient();
+    const res = await client.ton.wallet.v4r2.send({
+      destinationAddress: "UQdest",
+      amount: 0.21,
+      amountNano: "210000000",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+
+  it("rejects when neither amount nor amountNano is given", async () => {
+    const client = fundedClient();
+    // @ts-expect-error intentionally missing amount
+    const res = await client.ton.wallet.v4r2.send({ destinationAddress: "UQdest" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
   });
 
   it("refuses to send when the balance is too low", async () => {

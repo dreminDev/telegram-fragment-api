@@ -78,6 +78,29 @@ describe("stars.initPayment", () => {
     expect(body).toContain("payment_method=usdt_ton");
   });
 
+  it("syncs the price then retries on 'Price was changed'", async () => {
+    const { client, mock } = createClient();
+    let initCalls = 0;
+    let syncCalls = 0;
+    mock.onPost(/fragment\.com\/api/).reply((config) => {
+      const data = String(config.data);
+      if (data.includes("updateStarsBuyState")) {
+        syncCalls++;
+        return [200, { ok: true, mode: "new" }];
+      }
+      initCalls++;
+      if (initCalls < 2) {
+        return [200, { error: "Price was changed. Please try again." }];
+      }
+      return [200, { req_id: "ok123", amount: "0.5" }];
+    });
+
+    const data = expectOk(await client.stars.initPayment({ recipient: "R", quantity: 50 }));
+    expect(data.req_id).toBe("ok123");
+    expect(initCalls).toBe(2);
+    expect(syncCalls).toBe(2); // one sync before each init attempt
+  });
+
   it("maps need_ton to an AUTH error", async () => {
     const { client, mock } = createClient();
     mock.onPost(/fragment\.com\/api/).reply(200, { need_ton: true });

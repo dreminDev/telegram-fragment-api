@@ -57,3 +57,23 @@ describe("utils.decodePayload (service)", () => {
     if (!res.ok) expect(res.error.code).toBe("VALIDATION");
   });
 });
+
+describe("utils nano helpers", () => {
+  it("fromNano converts nanoTON to a TON string", () => {
+    const { client } = createClient();
+    expect(client.utils.fromNano("456100000")).toBe("0.4561");
+    expect(client.utils.fromNano(1_000_000_000n)).toBe("1");
+  });
+
+  it("toNano converts TON to exact nanoTON bigint", () => {
+    const { client } = createClient();
+    expect(client.utils.toNano("0.4561")).toBe(456100000n);
+    expect(client.utils.toNano(1)).toBe(1_000_000_000n);
+  });
+
+  it("round-trips without float error", () => {
+    const { client } = createClient();
+    const nano = "123456789";
+    expect(client.utils.toNano(client.utils.fromNano(nano)).toString()).toBe(nano);
+  });
+});

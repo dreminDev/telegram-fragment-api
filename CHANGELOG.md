@@ -4,6 +4,26 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-06-16
+
+### Fixed
+
+- **Stars purchase now completes end-to-end.** `initPayment` first syncs the
+  session's (volatile) TON price via `updateStarsBuyState` — exactly like the
+  website's poller — before calling `initBuyStarsRequest`. Without this Fragment
+  rejected the cold request with `Price was changed. Please try again.`. The
+  call also auto-retries (up to 3×) if the TON price drifts mid-request.
+
+### Added
+
+- `ton.wallet.v4r2.send` now accepts **`amountNano`** (exact nanoTON, e.g.
+  Fragment's `msg.amount`) as a safe alternative to `amount` (human TON). No
+  `/1e9`, no floating-point rounding. The result includes both `amount` and
+  `amountNano`. Validation rejects passing both or neither.
+- `client.utils.toNano` / `client.utils.fromNano` (and top-level `toNano` /
+  `fromNano` exports) for exact TON ⇄ nanoTON conversion.
+- `StarsPaymentMethod` type for `initPayment`'s `paymentMethod`.
+
 ## [0.2.0] - 2026-06-16
 
 ### Fixed

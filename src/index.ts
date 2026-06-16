@@ -37,8 +37,10 @@ export {
   type Result,
 } from "./core/result.js";
 
-// Pure helper
+// Pure helpers
 export { decodePayload } from "./parsers/decoder.js";
+/** Re-exported TON unit helpers — exact, no floating point. */
+export { fromNano, toNano } from "@ton/ton";
 
 // Domain + parameter types
 export type * from "./types.js";

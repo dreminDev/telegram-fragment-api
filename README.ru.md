@@ -131,6 +131,8 @@ await client.auth.fetchHash(); // спарсит и сохранит hash авт
 ```ts
 await client.users.nickToHash({ nickname: "durov" });        // → recipient-хеш
 client.utils.decodePayload({ payload: "te6ccg..." });        // → { decoded } (синхронно)
+client.utils.fromNano("456100000");                          // → "0.4561"  (нано → TON)
+client.utils.toNano("0.4561");                               // → 456100000n (TON → нано)
 ```
 
 ### `client.stars`
@@ -161,12 +163,20 @@ if (res.ok) console.log(res.data.tonRate, res.data.options);
 await client.ton.getRandomLiteServer();                          // → { ip_readable, port }
 await client.ton.wallet.getBalance({ address: "UQ..." });        // → { nano, ton, source }
 
+// сумму можно в TON …
+await client.ton.wallet.v4r2.send({ destinationAddress: "UQ...", amount: 0.21 });
+
+// … или точное значение в нанотонах (предпочтительно для платежей Fragment — без округлений):
 await client.ton.wallet.v4r2.send({
   destinationAddress: "UQCVVC0g...",
-  amount: 0.21,                          // в TON
+  amountNano: "456100000",               // прямо из msg.amount
   payload: "50 Telegram Stars\n\nRef#Im2y5itd6",
-});                                                              // → { sender, balanceBefore, ... }
+});                                       // → { sender, amount, amountNano, balanceBefore }
 ```
+
+> 💡 Используй **`amountNano`** при отправке платежа Fragment — берёт точную строку
+> `msg.amount` как есть. Никаких `/1e9`, никакого float-округления и шанса отправить
+> в миллиард раз больше.
 
 ### `client.account`
 
@@ -213,12 +223,16 @@ const decoded = client.utils.decodePayload({ payload: msg.payload });
 
 const tx = await client.ton.wallet.v4r2.send({
   destinationAddress: msg.address,
-  amount: Number(init.data.amount),
+  amountNano: msg.amount,                         // точное значение в нанотонах
   payload: decoded.ok ? decoded.data.decoded : "",
 });
 
 console.log(tx.ok ? "Отправлено ✅" : `Ошибка: ${tx.error.message}`);
 ```
+
+> `initPayment` сам синхронизирует курс TON и ретраит при `Price was changed`,
+> так что вручную это делать не нужно. К аккаунту Fragment должен быть подключён
+> TON-кошелёк, а для подписи нужны настоящий `toncenterApiKey` + `walletSeed`.
 
 ## 🧰 Несколько аккаунтов
 

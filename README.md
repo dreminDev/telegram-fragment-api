@@ -131,6 +131,8 @@ Every network call returns a `Promise<Result<T>>`.
 ```ts
 await client.users.nickToHash({ nickname: "durov" });        // → recipient hash
 client.utils.decodePayload({ payload: "te6ccg..." });        // → { decoded } (sync)
+client.utils.fromNano("456100000");                          // → "0.4561"  (nanoTON → TON)
+client.utils.toNano("0.4561");                               // → 456100000n (TON → nanoTON)
 ```
 
 ### `client.stars`
@@ -161,12 +163,20 @@ if (res.ok) console.log(res.data.tonRate, res.data.options);
 await client.ton.getRandomLiteServer();                          // → { ip_readable, port }
 await client.ton.wallet.getBalance({ address: "UQ..." });        // → { nano, ton, source }
 
+// pass a human amount in TON …
+await client.ton.wallet.v4r2.send({ destinationAddress: "UQ...", amount: 0.21 });
+
+// … or an exact nanoTON amount (preferred for Fragment payments — no rounding):
 await client.ton.wallet.v4r2.send({
   destinationAddress: "UQCVVC0g...",
-  amount: 0.21,                          // in TON
+  amountNano: "456100000",               // straight from msg.amount
   payload: "50 Telegram Stars\n\nRef#Im2y5itd6",
-});                                                              // → { sender, balanceBefore, ... }
+});                                       // → { sender, amount, amountNano, balanceBefore }
 ```
+
+> 💡 Use **`amountNano`** when forwarding a Fragment payment — it takes Fragment's
+> exact `msg.amount` string as-is. No `/1e9`, no floating-point rounding, no chance
+> of accidentally sending a billion times too much.
 
 ### `client.account`
 
@@ -213,12 +223,16 @@ const decoded = client.utils.decodePayload({ payload: msg.payload });
 
 const tx = await client.ton.wallet.v4r2.send({
   destinationAddress: msg.address,
-  amount: Number(init.data.amount),
+  amountNano: msg.amount,                         // exact nanoTON — no conversion
   payload: decoded.ok ? decoded.data.decoded : "",
 });
 
 console.log(tx.ok ? "Sent ✅" : `Failed: ${tx.error.message}`);
 ```
+
+> `initPayment` syncs the (volatile) TON price internally and retries on
+> `Price was changed`, so you don't have to. The Fragment account must have a
+> connected TON wallet, and you need a real `toncenterApiKey` + `walletSeed` to sign.
 
 ## 🧰 Multiple accounts
 

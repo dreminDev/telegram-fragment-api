@@ -177,15 +177,27 @@ export interface WalletBalance {
 export interface SendTonParams {
   /** Recipient TON address. */
   destinationAddress: string;
-  /** Amount to send, in TON (e.g. `0.21`). */
-  amount: number;
+  /**
+   * Amount in human TON (e.g. `0.21`). Provide this **or** {@link amountNano}.
+   * Convenient, but goes through a decimal→nano conversion.
+   */
+  amount?: number;
+  /**
+   * Exact amount in nanoTON (e.g. Fragment's `msg.amount` string). Provide this
+   * **or** {@link amount}. Preferred when forwarding a Fragment payment — it is
+   * exact and avoids float rounding / the `/1e9` mistake.
+   */
+  amountNano?: string | bigint;
   /** Optional text comment (e.g. the decoded Stars payload). */
   payload?: string;
 }
 
 export interface SendTonData {
   destination: string;
+  /** Amount sent, in human TON. */
   amount: number;
+  /** Amount sent, in exact nanoTON. */
+  amountNano: string;
   payload: string;
   /** Sender wallet address. */
   sender: string;

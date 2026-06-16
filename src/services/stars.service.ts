@@ -87,36 +87,60 @@ export class StarsService extends BaseService {
       return err(validationError("`quantity` must be a positive number."));
     }
 
-    const res = await this.ctx.http.postForm<PaymentInit>(
-      this.ctx.apiUrl(),
-      {
-        recipient,
-        quantity,
-        payment_method: paymentMethod,
-        method: "initBuyStarsRequest",
-      },
-      { headers: this.ctx.apiHeaders() },
-    );
-    if (!res.ok) return res;
+    // Fragment rejects a "cold" init with "Price was changed" unless the
+    // session's TON price was just synced. The website does this by polling
+    // updateStarsBuyState; we sync once before each attempt and retry if the
+    // (volatile) TON price moves in between.
+    let last: PaymentInit | undefined;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await this.syncBuyState();
 
-    if (res.data.need_ton) {
-      return err(
-        new FragmentError(
-          "AUTH",
-          "Fragment requires a connected TON wallet (need_ton). Connect a wallet on fragment.com first.",
-          { details: res.data },
-        ),
+      const res = await this.ctx.http.postForm<PaymentInit>(
+        this.ctx.apiUrl(),
+        {
+          recipient,
+          quantity,
+          payment_method: paymentMethod,
+          method: "initBuyStarsRequest",
+        },
+        { headers: this.ctx.apiHeaders() },
       );
-    }
-    if (res.data.error) {
-      return err(apiError(res.data.error, { details: res.data }));
-    }
-    if (!res.data.req_id) {
+      if (!res.ok) return res;
+      last = res.data;
+
+      if (res.data.req_id) return ok(res.data);
+      if (res.data.need_ton) {
+        return err(
+          new FragmentError(
+            "AUTH",
+            "Fragment requires a connected TON wallet (need_ton). Connect a wallet on fragment.com first.",
+            { details: res.data },
+          ),
+        );
+      }
+      // Price drifted between sync and init — re-sync and try again.
+      if (res.data.error && /price/i.test(res.data.error)) continue;
+      if (res.data.error) {
+        return err(apiError(res.data.error, { details: res.data }));
+      }
       return err(
         apiError("Fragment did not return a req_id.", { details: res.data }),
       );
     }
-    return ok(res.data);
+    return err(
+      apiError("Could not lock a price (it kept changing). Try again.", {
+        details: last,
+      }),
+    );
+  }
+
+  /** Sync the session's Stars buy state (TON price) like the website's poller. */
+  private async syncBuyState(): Promise<void> {
+    await this.ctx.http.postForm(
+      this.ctx.apiUrl(),
+      { mode: "new", lv: "false", method: "updateStarsBuyState" },
+      { headers: this.ctx.apiHeaders() },
+    );
   }
 
   /**

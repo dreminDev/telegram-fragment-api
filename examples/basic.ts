@@ -58,10 +58,10 @@ async function main(): Promise<void> {
   const decoded = client.utils.decodePayload({ payload: message.payload });
   if (decoded.ok) console.log("Decoded payload:", decoded.data.decoded);
 
-  // Uncomment to actually send TON:
+  // Uncomment to actually send TON (spends real funds):
   // const tx = await client.ton.wallet.v4r2.send({
   //   destinationAddress: message.address,
-  //   amount: Number(init.data.amount),
+  //   amountNano: message.amount, // exact nanoTON straight from Fragment — no /1e9
   //   payload: decoded.ok ? decoded.data.decoded : "",
   // });
   // console.log(tx.ok ? tx.data : tx.error);

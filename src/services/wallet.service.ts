@@ -1,5 +1,5 @@
 import { mnemonicToPrivateKey } from "@ton/crypto";
-import { TonClient, WalletContractV4, internal, toNano } from "@ton/ton";
+import { TonClient, WalletContractV4, fromNano, internal, toNano } from "@ton/ton";
 import { BaseService, type FragmentContext } from "../core/context.js";
 import {
   FragmentError,
@@ -25,19 +25,28 @@ export class V4R2Service extends BaseService {
    * Requires `toncenterApiKey` and `walletSeed`. Performs a balance check
    * before broadcasting.
    *
+   * Pass the amount **either** as `amount` (human TON, e.g. `0.21`) **or**
+   * `amountNano` (exact nanoTON, e.g. Fragment's `msg.amount`). Prefer
+   * `amountNano` when forwarding a Fragment payment — it's exact and avoids the
+   * float-division footgun.
+   *
    * @example
    * ```ts
-   * const res = await client.ton.wallet.v4r2.send({
-   *   destinationAddress: "UQ...",
-   *   amount: 0.21,
-   *   payload: "50 Telegram Stars",
+   * // human amount
+   * await client.ton.wallet.v4r2.send({ destinationAddress: "UQ...", amount: 0.21 });
+   *
+   * // exact Fragment payment (no conversion needed)
+   * await client.ton.wallet.v4r2.send({
+   *   destinationAddress: msg.address,
+   *   amountNano: msg.amount,            // "456100000"
+   *   payload: decoded,
    * });
-   * if (res.ok) console.log(res.data.sender);
    * ```
    */
   async send({
     destinationAddress,
     amount,
+    amountNano,
     payload = "",
   }: SendTonParams): Promise<Result<SendTonData>> {
     const { toncenterApiKey, walletSeed } = this.ctx.credentials;
@@ -45,9 +54,12 @@ export class V4R2Service extends BaseService {
     if (typeof destinationAddress !== "string" || destinationAddress.length === 0) {
       return err(validationError("`destinationAddress` must be a non-empty string."));
     }
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return err(validationError("`amount` must be greater than 0."));
-    }
+
+    // Resolve the value to send as exact nanoTON (bigint) — no floats.
+    const valueResult = resolveValueNano(amount, amountNano);
+    if (!valueResult.ok) return valueResult;
+    const valueNano = valueResult.data;
+
     if (!toncenterApiKey) {
       return err(validationError("toncenterApiKey is not set."));
     }
@@ -71,13 +83,17 @@ export class V4R2Service extends BaseService {
       const sender = wallet.address.toString();
 
       const balanceNano = await contract.getBalance();
-      const balanceTon = Number(balanceNano) / NANO;
 
-      if (balanceTon < amount) {
+      if (balanceNano < valueNano) {
         return err(
           insufficientFundsError(
-            `Insufficient funds. Required ${amount} TON, available ${balanceTon.toFixed(4)} TON.`,
-            { details: { nano: Number(balanceNano), ton: balanceTon } },
+            `Insufficient funds. Required ${fromNano(valueNano)} TON, available ${fromNano(balanceNano)} TON.`,
+            {
+              details: {
+                requiredNano: valueNano.toString(),
+                availableNano: balanceNano.toString(),
+              },
+            },
           ),
         );
       }
@@ -89,7 +105,7 @@ export class V4R2Service extends BaseService {
         messages: [
           internal({
             to: destinationAddress,
-            value: toNano(amount.toString()),
+            value: valueNano,
             body: payload,
             bounce: false,
           }),
@@ -98,10 +114,14 @@ export class V4R2Service extends BaseService {
 
       return ok({
         destination: destinationAddress,
-        amount,
+        amount: Number(fromNano(valueNano)),
+        amountNano: valueNano.toString(),
         payload,
         sender,
-        balanceBefore: { nano: Number(balanceNano), ton: balanceTon },
+        balanceBefore: {
+          nano: Number(balanceNano),
+          ton: Number(fromNano(balanceNano)),
+        },
       });
     } catch (e) {
       return err(
@@ -111,6 +131,37 @@ export class V4R2Service extends BaseService {
       );
     }
   }
+}
+
+/** Resolve `amount` (TON) / `amountNano` (nanoTON) into an exact bigint nano value. */
+function resolveValueNano(
+  amount: number | undefined,
+  amountNano: string | bigint | undefined,
+): Result<bigint> {
+  if (amount !== undefined && amountNano !== undefined) {
+    return err(
+      validationError("Provide either `amount` or `amountNano`, not both."),
+    );
+  }
+  if (amountNano !== undefined) {
+    let v: bigint;
+    try {
+      v = BigInt(amountNano);
+    } catch {
+      return err(validationError("`amountNano` must be an integer (nanoTON)."));
+    }
+    if (v <= 0n) {
+      return err(validationError("`amountNano` must be greater than 0."));
+    }
+    return ok(v);
+  }
+  if (amount !== undefined) {
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return err(validationError("`amount` must be greater than 0."));
+    }
+    return ok(toNano(amount.toString()));
+  }
+  return err(validationError("Provide `amount` (TON) or `amountNano` (nanoTON)."));
 }
 
 /** TON wallet operations: balance + nested v4r2 transfers. */
