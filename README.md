@@ -137,16 +137,16 @@ client.utils.decodePayload({ payload: "te6ccg..." });        // → { decoded } 
 
 ```ts
 await client.stars.getPrice({ quantity: 5050 });             // → { curPrice: { TON, USDT } }
-await client.stars.initPayment({ recipient, quantity: 50 }); // ⚠️ see note below
-await client.stars.getPaymentInfo({ requestId });            // ⚠️ see note below
+await client.stars.initPayment({ recipient, quantity: 50 }); // → { req_id, amount }  (payment_method: "ton" by default)
+await client.stars.getPaymentInfo({ requestId });            // → { transaction: { messages } }
 ```
 
-> ⚠️ **Buying Stars is no longer possible programmatically.** Fragment moved Stars
-> checkout to **TON Connect** — the payment transaction is now built client-side and
-> signed in your wallet. `initPayment` / `getPaymentInfo` call Fragment's legacy API,
-> which now returns `Access denied`. The on-chain payment carries a server-issued
-> `Ref#…` bound to the recipient that Fragment no longer exposes via API, so a payment
-> sent without it won't credit any Stars. **`getPrice` and every other method still work.**
+> 💡 **Buying Stars requirements.** `initPayment` sends `payment_method` (default `"ton"`)
+> — Fragment **requires** it; without it you get `Access denied`. The Fragment account
+> must also have a **TON wallet connected** (otherwise `initPayment` returns an `AUTH`
+> error with `need_ton`). `getPaymentInfo` then returns the on-chain transaction
+> (`transaction.messages[0]` = `{ address, amount, payload }`), which you sign and
+> broadcast yourself with `client.ton.wallet.v4r2.send(...)` — see the full workflow below.
 
 ### `client.premium`
 

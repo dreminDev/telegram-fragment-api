@@ -1,5 +1,5 @@
 import { BaseService } from "../core/context.js";
-import { apiError, validationError } from "../core/errors.js";
+import { FragmentError, apiError, validationError } from "../core/errors.js";
 import { err, ok, type Result } from "../core/result.js";
 import type {
   GetPaymentInfoParams,
@@ -65,9 +65,9 @@ export class StarsService extends BaseService {
   /**
    * Initialize a Stars purchase for a recipient.
    *
-   * ⚠️ **No longer functional.** Fragment moved Stars checkout to TON Connect and
-   * this legacy endpoint now responds with `Access denied`. Kept for
-   * completeness; see the README "client.stars" note. `getPrice` is unaffected.
+   * Sends `payment_method` (default `"ton"`) — this is **required** by Fragment;
+   * omitting it yields `Access denied`. If the Fragment account has no connected
+   * wallet, the response carries `need_ton`, surfaced here as an `AUTH` error.
    *
    * @example
    * ```ts
@@ -78,6 +78,7 @@ export class StarsService extends BaseService {
   async initPayment({
     recipient,
     quantity,
+    paymentMethod = "ton",
   }: InitStarsPaymentParams): Promise<Result<PaymentInit>> {
     if (typeof recipient !== "string" || recipient.length === 0) {
       return err(validationError("`recipient` must be a non-empty string."));
@@ -88,11 +89,28 @@ export class StarsService extends BaseService {
 
     const res = await this.ctx.http.postForm<PaymentInit>(
       this.ctx.apiUrl(),
-      { recipient, quantity, method: "initBuyStarsRequest" },
+      {
+        recipient,
+        quantity,
+        payment_method: paymentMethod,
+        method: "initBuyStarsRequest",
+      },
       { headers: this.ctx.apiHeaders() },
     );
     if (!res.ok) return res;
 
+    if (res.data.need_ton) {
+      return err(
+        new FragmentError(
+          "AUTH",
+          "Fragment requires a connected TON wallet (need_ton). Connect a wallet on fragment.com first.",
+          { details: res.data },
+        ),
+      );
+    }
+    if (res.data.error) {
+      return err(apiError(res.data.error, { details: res.data }));
+    }
     if (!res.data.req_id) {
       return err(
         apiError("Fragment did not return a req_id.", { details: res.data }),
@@ -102,14 +120,23 @@ export class StarsService extends BaseService {
   }
 
   /**
-   * Get the on-chain transaction details (address, amount, payload) for a Stars
-   * purchase initialized with {@link StarsService.initPayment}.
+   * Get the on-chain transaction (address, amount, payload) for a Stars purchase
+   * initialized with {@link StarsService.initPayment}. The returned
+   * `transaction.messages[0]` can be signed and broadcast with
+   * {@link V4R2Service.send}.
    *
-   * ⚠️ **No longer functional** — depends on {@link StarsService.initPayment},
-   * which Fragment has locked behind TON Connect (`Access denied`).
+   * @example
+   * ```ts
+   * const info = await client.stars.getPaymentInfo({ requestId });
+   * if (info.ok) {
+   *   const msg = info.data.transaction!.messages[0]!;
+   *   // msg.address, msg.amount, msg.payload
+   * }
+   * ```
    */
   async getPaymentInfo({
     requestId,
+    showSender = false,
   }: GetPaymentInfoParams): Promise<Result<PaymentInfo>> {
     if (typeof requestId !== "string" || requestId.length === 0) {
       return err(validationError("`requestId` must be a non-empty string."));
@@ -117,11 +144,25 @@ export class StarsService extends BaseService {
 
     const res = await this.ctx.http.postForm<PaymentInfo>(
       this.ctx.apiUrl(),
-      { transaction: 1, id: requestId, method: "getBuyStarsLink" },
+      {
+        id: requestId,
+        show_sender: showSender ? 1 : 0,
+        transaction: 1,
+        method: "getBuyStarsLink",
+      },
       { headers: this.ctx.apiHeaders() },
     );
     if (!res.ok) return res;
 
+    if (res.data.need_verify) {
+      return err(
+        new FragmentError(
+          "AUTH",
+          "Fragment requires additional verification (need_verify) for this purchase.",
+          { details: res.data },
+        ),
+      );
+    }
     if (!res.data.ok || !res.data.transaction) {
       return err(
         apiError(res.data.error ?? "Fragment returned no transaction.", {

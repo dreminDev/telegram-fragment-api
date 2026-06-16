@@ -54,12 +54,36 @@ describe("stars.getPrice", () => {
 });
 
 describe("stars.initPayment", () => {
-  it("returns req_id and amount", async () => {
+  it("returns req_id and sends payment_method (default ton)", async () => {
     const { client, mock } = createClient();
-    mock.onPost(/fragment\.com\/api/).reply(200, { req_id: "abc123", amount: "0.2774" });
+    let body = "";
+    mock.onPost(/fragment\.com\/api/).reply((config) => {
+      body = String(config.data);
+      return [200, { req_id: "abc123", amount: "0.2774" }];
+    });
     const data = expectOk(await client.stars.initPayment({ recipient: "R", quantity: 50 }));
     expect(data.req_id).toBe("abc123");
-    expect(data.amount).toBe("0.2774");
+    expect(body).toContain("payment_method=ton");
+    expect(body).toContain("method=initBuyStarsRequest");
+  });
+
+  it("forwards a custom payment method", async () => {
+    const { client, mock } = createClient();
+    let body = "";
+    mock.onPost(/fragment\.com\/api/).reply((config) => {
+      body = String(config.data);
+      return [200, { req_id: "x", amount: "1" }];
+    });
+    await client.stars.initPayment({ recipient: "R", quantity: 50, paymentMethod: "usdt_ton" });
+    expect(body).toContain("payment_method=usdt_ton");
+  });
+
+  it("maps need_ton to an AUTH error", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, { need_ton: true });
+    const res = await client.stars.initPayment({ recipient: "R", quantity: 50 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("AUTH");
   });
 
   it("validates the recipient", async () => {
@@ -79,16 +103,36 @@ describe("stars.initPayment", () => {
 });
 
 describe("stars.getPaymentInfo", () => {
-  it("returns the transaction messages", async () => {
+  it("returns the transaction messages and sends show_sender + transaction", async () => {
     const { client, mock } = createClient();
-    mock.onPost(/fragment\.com\/api/).reply(200, {
-      ok: true,
-      transaction: {
-        messages: [{ address: "UQ...", amount: "277400000", payload: "te6..." }],
-      },
+    let body = "";
+    mock.onPost(/fragment\.com\/api/).reply((config) => {
+      body = String(config.data);
+      return [
+        200,
+        {
+          ok: true,
+          transaction: {
+            messages: [{ address: "UQ...", amount: "277400000", payload: "te6..." }],
+          },
+        },
+      ];
     });
-    const data = expectOk(await client.stars.getPaymentInfo({ requestId: "abc123" }));
+    const data = expectOk(
+      await client.stars.getPaymentInfo({ requestId: "abc123", showSender: true }),
+    );
     expect(data.transaction?.messages[0]?.address).toBe("UQ...");
+    expect(body).toContain("show_sender=1");
+    expect(body).toContain("transaction=1");
+    expect(body).toContain("id=abc123");
+  });
+
+  it("maps need_verify to an AUTH error", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, { ok: true, need_verify: true });
+    const res = await client.stars.getPaymentInfo({ requestId: "abc123" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("AUTH");
   });
 
   it("errors when transaction is missing", async () => {

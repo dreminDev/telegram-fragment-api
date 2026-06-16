@@ -67,11 +67,26 @@ export interface StarsPrice {
   };
 }
 
+/** Payment method accepted by Fragment's Stars checkout. */
+export type StarsPaymentMethod =
+  | "ton"
+  | "usdt_ton"
+  | "usdt_eth"
+  | "usdt_pol"
+  | "usdc_eth"
+  | "usdc_base"
+  | "usdc_pol";
+
 export interface InitStarsPaymentParams {
   /** Recipient hash (from {@link NickToHashData}). */
   recipient: string;
   /** Amount of stars to buy. */
   quantity: number;
+  /**
+   * Payment currency/chain. Defaults to `"ton"` (native TON, signable with a
+   * wallet seed via {@link V4R2Service.send}).
+   */
+  paymentMethod?: StarsPaymentMethod;
 }
 
 /** Raw Fragment API response for `initBuyStarsRequest`. */
@@ -80,12 +95,17 @@ export interface PaymentInit {
   myself?: boolean;
   to_bot?: boolean;
   amount: string;
+  /** Set by Fragment when no TON wallet is connected to the account. */
+  need_ton?: boolean;
+  error?: string;
   [key: string]: unknown;
 }
 
 export interface GetPaymentInfoParams {
   /** The `req_id` returned by {@link StarsService.initPayment}. */
   requestId: string;
+  /** Whether to reveal the sender's name to the recipient. Defaults to `false`. */
+  showSender?: boolean;
 }
 
 export interface PaymentMessage {
@@ -102,6 +122,8 @@ export interface PaymentInfo {
     from?: string;
     messages: PaymentMessage[];
   };
+  /** Set by Fragment when the purchase needs extra verification. */
+  need_verify?: boolean;
   error?: string;
   [key: string]: unknown;
 }

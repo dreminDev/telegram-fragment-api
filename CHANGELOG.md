@@ -4,6 +4,23 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-06-16
+
+### Fixed
+
+- **Buying Stars works again.** `initPayment` now sends the `payment_method`
+  parameter (default `"ton"`) that Fragment requires — omitting it caused
+  `Access denied`. Discovered by reverse-engineering Fragment's own client JS.
+
+### Added
+
+- `initPayment` accepts `paymentMethod` (`"ton"` | `"usdt_ton"` | `"usdt_eth"` |
+  `"usdt_pol"` | `"usdc_eth"` | `"usdc_base"` | `"usdc_pol"`).
+- `getPaymentInfo` accepts `showSender` and now sends `show_sender` +
+  `transaction` like the website does.
+- `need_ton` (no connected wallet) and `need_verify` responses are surfaced as
+  structured `AUTH` errors instead of a generic failure.
+
 ## [0.1.3] - 2026-06-16
 
 ### Changed
