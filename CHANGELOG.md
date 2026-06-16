@@ -4,6 +4,16 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-06-16
+
+### Fixed
+
+- Authenticated requests now work under **Bun** (and any runtime exposing a
+  global `XMLHttpRequest`). axios was picking the `xhr` adapter, which strips
+  the `Cookie` header — so cookie-authorized actions like buying stars failed
+  with `Access denied` while public reads still worked. The HTTP client now
+  forces the `http` adapter (falling back to `fetch`).
+
 ## [0.1.1] - 2026-06-16
 
 ### Fixed

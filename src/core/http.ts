@@ -27,7 +27,15 @@ export class HttpClient {
   constructor(options: HttpClientOptions = {}) {
     this.axios =
       options.axiosInstance ??
-      axios.create({ timeout: options.timeout ?? 30_000 });
+      axios.create({
+        timeout: options.timeout ?? 30_000,
+        // Force the Node `http` adapter (fall back to `fetch`). Some runtimes —
+        // notably Bun — expose a global `XMLHttpRequest`, which makes axios pick
+        // the `xhr` adapter, and XHR silently strips the `Cookie` header. That
+        // breaks every authenticated Fragment request (e.g. buying stars fails
+        // with "Access denied" while public reads still work).
+        adapter: ["http", "fetch"],
+      });
   }
 
   /** POST `application/x-www-form-urlencoded`, parse a JSON response. */
