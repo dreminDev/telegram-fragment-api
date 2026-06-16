@@ -4,6 +4,15 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.3] - 2026-06-16
+
+### Added
+
+- `client.ton.wallet.getAddress()` — derive your v4r2 wallet address (friendly +
+  raw) from `walletSeed`, no network. Compare `raw` with a Fragment
+  `transaction.from` to confirm the payment originates from the expected wallet,
+  without pulling `@ton/*` into your own project.
+
 ## [0.2.2] - 2026-06-16
 
 ### Fixed

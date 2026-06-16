@@ -161,6 +161,7 @@ if (res.ok) console.log(res.data.tonRate, res.data.options);
 
 ```ts
 await client.ton.getRandomLiteServer();                          // → { ip_readable, port }
+await client.ton.wallet.getAddress();                            // → { friendly, raw }  (из walletSeed, без сети)
 await client.ton.wallet.getBalance({ address: "UQ..." });        // → { nano, ton, source }
 
 // сумму можно в TON …

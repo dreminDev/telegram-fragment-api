@@ -12,6 +12,7 @@ import type {
   GetBalanceParams,
   SendTonData,
   SendTonParams,
+  WalletAddress,
   WalletBalance,
 } from "../types.js";
 
@@ -184,6 +185,37 @@ export class WalletService extends BaseService {
   constructor(ctx: FragmentContext) {
     super(ctx);
     this.v4r2 = new V4R2Service(ctx);
+  }
+
+  /**
+   * Derive your wallet's v4r2 address from the configured `walletSeed` — no
+   * network. Compare `raw` with a Fragment `transaction.from` to confirm the
+   * payment will originate from the wallet the order expects.
+   *
+   * @example
+   * ```ts
+   * const me = await client.ton.wallet.getAddress();
+   * if (me.ok) console.log(me.data.friendly, me.data.raw);
+   * ```
+   */
+  async getAddress(): Promise<Result<WalletAddress>> {
+    const { walletSeed } = this.ctx.credentials;
+    if (!walletSeed) return err(validationError("walletSeed is not set."));
+    try {
+      const keyPair = await mnemonicToPrivateKey(walletSeed.trim().split(/\s+/));
+      const wallet = WalletContractV4.create({
+        workchain: 0,
+        publicKey: keyPair.publicKey,
+      });
+      return ok({
+        friendly: wallet.address.toString(),
+        raw: wallet.address.toRawString(),
+      });
+    } catch (e) {
+      return err(
+        new FragmentError("VALIDATION", "Invalid walletSeed.", { cause: e }),
+      );
+    }
   }
 
   /**

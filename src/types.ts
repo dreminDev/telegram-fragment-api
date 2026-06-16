@@ -199,6 +199,14 @@ export interface SendTonParams {
   payloadCell?: string;
 }
 
+/** A wallet address in both user-friendly and raw forms. */
+export interface WalletAddress {
+  /** User-friendly form, e.g. `EQAAuf...` / `UQAAuf...`. */
+  friendly: string;
+  /** Raw form, e.g. `0:00b9fa57...` — compare this with a Fragment `transaction.from`. */
+  raw: string;
+}
+
 export interface SendTonData {
   destination: string;
   /** Amount sent, in human TON. */

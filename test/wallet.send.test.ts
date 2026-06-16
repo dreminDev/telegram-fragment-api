@@ -24,7 +24,12 @@ vi.mock("@ton/ton", () => ({
     }),
   })),
   WalletContractV4: {
-    create: vi.fn(() => ({ address: { toString: () => "EQAsender_addr" } })),
+    create: vi.fn(() => ({
+      address: {
+        toString: () => "EQAsender_addr",
+        toRawString: () => "0:sender_raw",
+      },
+    })),
   },
   internal: h.internal,
   toNano: vi.fn((v: string) => BigInt(Math.round(Number(v) * 1e9))),
@@ -180,6 +185,25 @@ describe("ton.wallet.v4r2.send", () => {
       destinationAddress: "UQdest",
       amount: 1,
     });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+});
+
+describe("ton.wallet.getAddress", () => {
+  it("derives friendly + raw address from the seed", async () => {
+    const client = fundedClient();
+    const res = await client.ton.wallet.getAddress();
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.data.friendly).toBe("EQAsender_addr");
+      expect(res.data.raw).toBe("0:sender_raw");
+    }
+  });
+
+  it("requires a wallet seed", async () => {
+    const client = new Fragment({ toncenterApiKey: "tc" });
+    const res = await client.ton.wallet.getAddress();
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("VALIDATION");
   });
