@@ -1,17 +1,28 @@
 import { describe, expect, it } from "vitest";
 import { createClient, expectOk } from "./helpers.js";
 
+// Real-world shape returned by Fragment's `updateStarsPrices`.
 const PRICE_HTML =
-  '<span class="icon-ton">0<span class="mini-frac">.2774</span></span> ~&nbsp;&#036;1.5';
+  '<div class="tm-value icon-before icon-ton">44<span class="mini-frac">.6172</span></div>' +
+  '<div class="tm-radio-desc wide-only">&#036;75.75</div>';
 
 describe("stars.getPrice", () => {
-  it("parses TON and USDT out of the price HTML", async () => {
+  it("parses TON and USD out of the price HTML", async () => {
     const { client, mock } = createClient();
     mock.onPost(/fragment\.com\/api/).reply(200, { ok: true, cur_price: PRICE_HTML });
 
     const data = expectOk(await client.stars.getPrice({ quantity: 5050 }));
-    expect(data.curPrice.TON).toBe("0.2774");
-    expect(data.curPrice.USDT).toBe("1.5");
+    expect(data.curPrice.TON).toBe("44.6172");
+    expect(data.curPrice.USDT).toBe("75.75");
+  });
+
+  it("also parses a literal `$` USD price", async () => {
+    const { client, mock } = createClient();
+    const html =
+      '<div class="icon-ton">1<span class="mini-frac">.0</span></div>$2.50';
+    mock.onPost(/fragment\.com\/api/).reply(200, { ok: true, cur_price: html });
+    const data = expectOk(await client.stars.getPrice({ quantity: 100 }));
+    expect(data.curPrice.USDT).toBe("2.50");
   });
 
   it("accepts a numeric string quantity", async () => {

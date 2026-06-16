@@ -55,7 +55,8 @@ export class StarsService extends BaseService {
       /icon-ton">(\d+)<span class="mini-frac">\.(\d+)<\/span>/,
     );
     const ton = tonMatch ? `${tonMatch[1]}.${tonMatch[2]}` : "0";
-    const usdtMatch = html.match(/~&nbsp;&#036;(\d+(?:\.\d+)?)/);
+    // USD is rendered as `&#036;75.75` / `&#36;75.75` / `$75.75` (entity or literal).
+    const usdtMatch = html.match(/(?:&#0?36;|\$)\s*(\d+(?:\.\d+)?)/);
     const usdt = usdtMatch ? usdtMatch[1]! : "0";
 
     return ok({ ok: true, curPrice: { TON: ton, USDT: usdt } });

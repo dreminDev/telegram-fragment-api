@@ -4,6 +4,14 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-06-16
+
+### Fixed
+
+- `stars.getPrice` now correctly parses the USD price. Fragment renders it as
+  `&#036;75.75` (also handles `&#36;` / literal `$`) without the old `~&nbsp;`
+  prefix, so the previous regex returned `"0"`.
+
 ## [0.1.0] - 2026-06-16
 
 Initial release — a class-based, `Result`-safe TypeScript client for Fragment.com.
