@@ -1,3 +1,4 @@
+import { Cell } from "@ton/core";
 import { mnemonicToPrivateKey } from "@ton/crypto";
 import { TonClient, WalletContractV4, fromNano, internal, toNano } from "@ton/ton";
 import { BaseService, type FragmentContext } from "../core/context.js";
@@ -35,11 +36,11 @@ export class V4R2Service extends BaseService {
    * // human amount
    * await client.ton.wallet.v4r2.send({ destinationAddress: "UQ...", amount: 0.21 });
    *
-   * // exact Fragment payment (no conversion needed)
+   * // exact Fragment payment — pass amount + payload straight from getPaymentInfo
    * await client.ton.wallet.v4r2.send({
    *   destinationAddress: msg.address,
    *   amountNano: msg.amount,            // "456100000"
-   *   payload: decoded,
+   *   payloadCell: msg.payload,          // exact BoC cell, byte-matches the site
    * });
    * ```
    */
@@ -48,6 +49,7 @@ export class V4R2Service extends BaseService {
     amount,
     amountNano,
     payload = "",
+    payloadCell,
   }: SendTonParams): Promise<Result<SendTonData>> {
     const { toncenterApiKey, walletSeed } = this.ctx.credentials;
 
@@ -59,6 +61,17 @@ export class V4R2Service extends BaseService {
     const valueResult = resolveValueNano(amount, amountNano);
     if (!valueResult.ok) return valueResult;
     const valueNano = valueResult.data;
+
+    // Body: an exact base64 BoC cell (preferred for Fragment payments — it is
+    // byte-identical to what the website sends) or a plain text comment.
+    let body: Cell | string = payload;
+    if (payloadCell !== undefined) {
+      try {
+        body = Cell.fromBase64(payloadCell);
+      } catch {
+        return err(validationError("`payloadCell` is not a valid base64 BoC cell."));
+      }
+    }
 
     if (!toncenterApiKey) {
       return err(validationError("toncenterApiKey is not set."));
@@ -106,7 +119,7 @@ export class V4R2Service extends BaseService {
           internal({
             to: destinationAddress,
             value: valueNano,
-            body: payload,
+            body,
             bounce: false,
           }),
         ],
@@ -116,7 +129,7 @@ export class V4R2Service extends BaseService {
         destination: destinationAddress,
         amount: Number(fromNano(valueNano)),
         amountNano: valueNano.toString(),
-        payload,
+        payload: payloadCell ?? payload,
         sender,
         balanceBefore: {
           nano: Number(balanceNano),

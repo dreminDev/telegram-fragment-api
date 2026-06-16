@@ -61,8 +61,8 @@ async function main(): Promise<void> {
   // Uncomment to actually send TON (spends real funds):
   // const tx = await client.ton.wallet.v4r2.send({
   //   destinationAddress: message.address,
-  //   amountNano: message.amount, // exact nanoTON straight from Fragment — no /1e9
-  //   payload: decoded.ok ? decoded.data.decoded : "",
+  //   amountNano: message.amount,   // exact nanoTON straight from Fragment — no /1e9
+  //   payloadCell: message.payload, // exact BoC cell — byte-matches the website
   // });
   // console.log(tx.ok ? tx.data : tx.error);
 }

@@ -86,6 +86,33 @@ describe("ton.wallet.v4r2.send", () => {
     );
   });
 
+  it("sends the exact BoC cell when payloadCell is given", async () => {
+    // A valid base64 BoC (comment cell "50 Telegram Stars").
+    const validBoc = "te6cckEBAQEAFwAAKgAAAAA1MCBUZWxlZ3JhbSBTdGFyc5fAhN4=";
+    const client = fundedClient();
+    const res = await client.ton.wallet.v4r2.send({
+      destinationAddress: "UQdest",
+      amountNano: "457100000",
+      payloadCell: validBoc,
+    });
+    expect(res.ok).toBe(true);
+    // the body forwarded to internal() is a parsed Cell object, not the raw string
+    const lastCall = h.internal.mock.calls.at(-1)?.[0] as { body: unknown };
+    expect(typeof lastCall.body).toBe("object");
+    expect(lastCall.body).not.toBe(validBoc);
+  });
+
+  it("rejects an invalid payloadCell", async () => {
+    const client = fundedClient();
+    const res = await client.ton.wallet.v4r2.send({
+      destinationAddress: "UQdest",
+      amountNano: "1",
+      payloadCell: "not-a-valid-boc-cell",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+
   it("rejects providing both amount and amountNano", async () => {
     const client = fundedClient();
     const res = await client.ton.wallet.v4r2.send({

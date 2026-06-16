@@ -188,8 +188,15 @@ export interface SendTonParams {
    * exact and avoids float rounding / the `/1e9` mistake.
    */
   amountNano?: string | bigint;
-  /** Optional text comment (e.g. the decoded Stars payload). */
+  /** Optional plain **text** comment. Ignored if {@link payloadCell} is set. */
   payload?: string;
+  /**
+   * Exact message body as a **base64 BoC cell** (e.g. Fragment's `msg.payload`).
+   * Preferred for Stars/Fragment payments — it is byte-identical to what the
+   * website sends via TON Connect, so Fragment matches the `Ref#…`. A
+   * re-encoded text comment may not match.
+   */
+  payloadCell?: string;
 }
 
 export interface SendTonData {

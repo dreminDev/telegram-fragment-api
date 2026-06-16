@@ -166,17 +166,18 @@ await client.ton.wallet.getBalance({ address: "UQ..." });        // → { nano, 
 // pass a human amount in TON …
 await client.ton.wallet.v4r2.send({ destinationAddress: "UQ...", amount: 0.21 });
 
-// … or an exact nanoTON amount (preferred for Fragment payments — no rounding):
+// … or an exact Fragment payment — pass amount + payload straight from getPaymentInfo:
 await client.ton.wallet.v4r2.send({
-  destinationAddress: "UQCVVC0g...",
-  amountNano: "456100000",               // straight from msg.amount
-  payload: "50 Telegram Stars\n\nRef#Im2y5itd6",
+  destinationAddress: msg.address,
+  amountNano: msg.amount,                // exact nanoTON, no rounding
+  payloadCell: msg.payload,              // exact BoC cell (byte-matches the website)
 });                                       // → { sender, amount, amountNano, balanceBefore }
 ```
 
-> 💡 Use **`amountNano`** when forwarding a Fragment payment — it takes Fragment's
-> exact `msg.amount` string as-is. No `/1e9`, no floating-point rounding, no chance
-> of accidentally sending a billion times too much.
+> 💡 For Stars/Fragment payments use **`amountNano`** + **`payloadCell`** (both straight
+> from `getPaymentInfo`). `amountNano` avoids the `/1e9` float footgun; `payloadCell`
+> sends Fragment's **exact** payload cell — a re-encoded text comment (`payload`) may not
+> byte-match, and then Fragment won't credit the Stars even though the TON is spent.
 
 ### `client.account`
 
@@ -219,12 +220,11 @@ const info = await client.stars.getPaymentInfo({ requestId: init.data.req_id });
 if (!info.ok) throw new Error(info.error.message);
 
 const msg = info.data.transaction!.messages[0]!;
-const decoded = client.utils.decodePayload({ payload: msg.payload });
 
 const tx = await client.ton.wallet.v4r2.send({
   destinationAddress: msg.address,
-  amountNano: msg.amount,                         // exact nanoTON — no conversion
-  payload: decoded.ok ? decoded.data.decoded : "",
+  amountNano: msg.amount,        // exact nanoTON — no conversion
+  payloadCell: msg.payload,      // exact BoC cell — byte-matches the website
 });
 
 console.log(tx.ok ? "Sent ✅" : `Failed: ${tx.error.message}`);

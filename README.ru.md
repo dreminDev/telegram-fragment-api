@@ -166,17 +166,18 @@ await client.ton.wallet.getBalance({ address: "UQ..." });        // → { nano, 
 // сумму можно в TON …
 await client.ton.wallet.v4r2.send({ destinationAddress: "UQ...", amount: 0.21 });
 
-// … или точное значение в нанотонах (предпочтительно для платежей Fragment — без округлений):
+// … или точный платёж Fragment — amount + payload прямо из getPaymentInfo:
 await client.ton.wallet.v4r2.send({
-  destinationAddress: "UQCVVC0g...",
-  amountNano: "456100000",               // прямо из msg.amount
-  payload: "50 Telegram Stars\n\nRef#Im2y5itd6",
+  destinationAddress: msg.address,
+  amountNano: msg.amount,                // точные нанотоны, без округлений
+  payloadCell: msg.payload,              // точная BoC-ячейка (байт-в-байт как сайт)
 });                                       // → { sender, amount, amountNano, balanceBefore }
 ```
 
-> 💡 Используй **`amountNano`** при отправке платежа Fragment — берёт точную строку
-> `msg.amount` как есть. Никаких `/1e9`, никакого float-округления и шанса отправить
-> в миллиард раз больше.
+> 💡 Для платежей Stars/Fragment используй **`amountNano`** + **`payloadCell`** (оба прямо
+> из `getPaymentInfo`). `amountNano` убирает float-баг с `/1e9`; `payloadCell` шлёт
+> **точную** ячейку Fragment — пере-кодированный текст-комментарий (`payload`) может не
+> совпасть байт-в-байт, и тогда Fragment **не зачислит** звёзды, хотя TON спишется.
 
 ### `client.account`
 
@@ -219,12 +220,11 @@ const info = await client.stars.getPaymentInfo({ requestId: init.data.req_id });
 if (!info.ok) throw new Error(info.error.message);
 
 const msg = info.data.transaction!.messages[0]!;
-const decoded = client.utils.decodePayload({ payload: msg.payload });
 
 const tx = await client.ton.wallet.v4r2.send({
   destinationAddress: msg.address,
-  amountNano: msg.amount,                         // точное значение в нанотонах
-  payload: decoded.ok ? decoded.data.decoded : "",
+  amountNano: msg.amount,        // точные нанотоны
+  payloadCell: msg.payload,      // точная BoC-ячейка — байт-в-байт как сайт
 });
 
 console.log(tx.ok ? "Отправлено ✅" : `Ошибка: ${tx.error.message}`);

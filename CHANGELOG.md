@@ -4,6 +4,18 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-06-16
+
+### Fixed
+
+- **Stars now actually get credited.** `ton.wallet.v4r2.send` gained a
+  `payloadCell` option that sends Fragment's **exact** base64 BoC cell
+  (`getPaymentInfo`'s `msg.payload`) as the message body — byte-identical to
+  what the website sends via TON Connect. The previous approach re-encoded the
+  decoded text comment, which could differ from the original cell; Fragment then
+  failed to match the `Ref#…` and the TON was spent without crediting Stars.
+  Always use `payloadCell: msg.payload` for Stars purchases.
+
 ## [0.2.1] - 2026-06-16
 
 ### Fixed
