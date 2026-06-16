@@ -38,10 +38,21 @@
 ## 📦 Установка
 
 ```bash
+# npm
 npm install telegram-fragment-api
+
+# yarn
+yarn add telegram-fragment-api
+
+# pnpm
+pnpm add telegram-fragment-api
+
+# bun
+bun add telegram-fragment-api
 ```
 
-> Требуется **Node.js ≥ 18**.
+> Работает на **Node.js ≥ 18**, **Bun** и любом рантайме с глобальным `fetch`.
+> Поставляется в двух форматах — **ESM + CommonJS**, поэтому `import` и `require` оба работают.
 
 ## 🚀 Быстрый старт
 

@@ -38,10 +38,21 @@ Buy Telegram Stars, check Premium prices, resolve usernames and move TON — cla
 ## 📦 Installation
 
 ```bash
+# npm
 npm install telegram-fragment-api
+
+# yarn
+yarn add telegram-fragment-api
+
+# pnpm
+pnpm add telegram-fragment-api
+
+# bun
+bun add telegram-fragment-api
 ```
 
-> Requires **Node.js ≥ 18**.
+> Works on **Node.js ≥ 18**, **Bun**, and any runtime with a global `fetch`.
+> Ships dual **ESM + CommonJS** builds, so `import` and `require` both work.
 
 ## 🚀 Quick start
 
