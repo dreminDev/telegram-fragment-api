@@ -22,7 +22,7 @@ const client = new Fragment({
 
 async function main(): Promise<void> {
   // 1. Resolve a nickname to a recipient hash
-  const user = await client.users.nickToHash({ nickname: "kompromizzdev" });
+  const user = await client.users.nickToHash({ nickname: "maksim_dremin" });
   if (!user.ok) {
     console.error("nickToHash failed:", user.error.code, user.error.message);
     return;

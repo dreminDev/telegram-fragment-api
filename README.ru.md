@@ -189,7 +189,7 @@ const client = new Fragment({
   walletSeed: process.env.WALLET_SEED!,
 });
 
-const user = await client.users.nickToHash({ nickname: "kompromizzdev" });
+const user = await client.users.nickToHash({ nickname: "maksim_dremin" });
 if (!user.ok) throw new Error(user.error.message);
 
 const init = await client.stars.initPayment({
