@@ -1,6 +1,6 @@
 {
   "name": "telegram-fragment-api",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Unofficial TypeScript client for Fragment.com — Telegram Stars, Premium, usernames and TON wallet operations, fully typed.",
   "type": "module",
   "main": "./dist/index.cjs",
