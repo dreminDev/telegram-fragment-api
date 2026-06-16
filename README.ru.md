@@ -220,21 +220,12 @@ npm test            # запустить тесты
 npm run test:coverage
 ```
 
-## 🐍 Переход с Fragment-py
+## 🎯 Принципы дизайна
 
-TypeScript-переосмысление [Fragment-py](https://github.com/illussioon/Fragment-py):
-
-- **На классах** — `new Fragment({ … })` вместо глобального синглтона.
-- **Объект-параметры** — `getPrice({ quantity })` вместо позиционных аргументов.
+- **На классах** — `new Fragment({ … })`, один изолированный клиент на аккаунт.
+- **Объект-параметры** — `getPrice({ quantity })` читается ясно и легко расширяется.
 - **`Result` вместо исключений** — проверяем `res.ok` вместо `try/catch`.
-- Везде **`async`** и **camelCase**.
-
-```diff
-- result = Fragment.user.nick_to_hash("durov")
-- recipient = result["found"]["recipient"]
-+ const res = await client.users.nickToHash({ nickname: "durov" });
-+ const recipient = res.ok ? res.data.found?.recipient : undefined;
-```
+- Везде **`async`** и **camelCase**, строгие типы.
 
 ## ⚠️ Дисклеймер
 
@@ -250,4 +241,4 @@ Issues и pull requests приветствуются! [Создайте issue](h
 
 ## 📄 Лицензия
 
-[MIT](./LICENSE) © Maksim
+[MIT](./LICENSE) © Maksim Dremin

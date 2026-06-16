@@ -6,8 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.0] - 2026-06-16
 
-Initial release — a class-based, `Result`-safe TypeScript reimagining of
-[Fragment-py](https://github.com/illussioon/Fragment-py).
+Initial release — a class-based, `Result`-safe TypeScript client for Fragment.com.
 
 ### Added
 

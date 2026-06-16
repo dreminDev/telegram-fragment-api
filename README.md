@@ -220,21 +220,12 @@ npm test            # run the suite
 npm run test:coverage
 ```
 
-## 🐍 Migrating from Fragment-py
+## 🎯 Design principles
 
-A TypeScript reimagining of [Fragment-py](https://github.com/illussioon/Fragment-py):
-
-- **Class-based** — `new Fragment({ … })` instead of a global singleton.
-- **Object params** — `getPrice({ quantity })` instead of positional args.
+- **Class-based** — `new Fragment({ … })`, one fully isolated client per account.
+- **Object params** — `getPrice({ quantity })` reads clearly and stays easy to extend.
 - **`Result` instead of exceptions** — check `res.ok` instead of `try/catch`.
-- **`async`** everywhere; **camelCase** everywhere.
-
-```diff
-- result = Fragment.user.nick_to_hash("durov")
-- recipient = result["found"]["recipient"]
-+ const res = await client.users.nickToHash({ nickname: "durov" });
-+ const recipient = res.ok ? res.data.found?.recipient : undefined;
-```
+- **`async` + camelCase** throughout, strict types everywhere.
 
 ## ⚠️ Disclaimer
 
@@ -250,4 +241,4 @@ If this saved you time, the best thank-you is a **[star on GitHub](https://githu
 
 ## 📄 License
 
-[MIT](./LICENSE) © Maksim
+[MIT](./LICENSE) © Maksim Dremin
