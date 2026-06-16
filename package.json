@@ -1,0 +1,77 @@
+{
+  "name": "telegram-fragment-api",
+  "version": "0.1.0",
+  "description": "Unofficial TypeScript client for Fragment.com — Telegram Stars, Premium, usernames and TON wallet operations, fully typed.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.ru.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "example": "tsx examples/basic.ts",
+    "prepublishOnly": "npm run typecheck && npm run test && npm run build"
+  },
+  "keywords": [
+    "fragment",
+    "fragment.com",
+    "telegram",
+    "telegram-stars",
+    "telegram-premium",
+    "ton",
+    "ton-blockchain",
+    "toncoin",
+    "stars",
+    "premium",
+    "usernames",
+    "typescript"
+  ],
+  "author": "Maksim <dmitrii.mileris@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dreminDev/telegram-fragment-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dreminDev/telegram-fragment-api/issues"
+  },
+  "homepage": "https://github.com/dreminDev/telegram-fragment-api#readme",
+  "dependencies": {
+    "@ton/core": "^0.63.1",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^16.3.0",
+    "axios": "^1.18.0",
+    "cheerio": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.21",
+    "@vitest/coverage-v8": "^2.1.9",
+    "axios-mock-adapter": "^2.1.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.9"
+  }
+}

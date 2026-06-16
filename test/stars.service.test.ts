@@ -1,0 +1,90 @@
+import { describe, expect, it } from "vitest";
+import { createClient, expectOk } from "./helpers.js";
+
+const PRICE_HTML =
+  '<span class="icon-ton">0<span class="mini-frac">.2774</span></span> ~&nbsp;&#036;1.5';
+
+describe("stars.getPrice", () => {
+  it("parses TON and USDT out of the price HTML", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, { ok: true, cur_price: PRICE_HTML });
+
+    const data = expectOk(await client.stars.getPrice({ quantity: 5050 }));
+    expect(data.curPrice.TON).toBe("0.2774");
+    expect(data.curPrice.USDT).toBe("1.5");
+  });
+
+  it("accepts a numeric string quantity", async () => {
+    const { client, mock } = createClient();
+    let body = "";
+    mock.onPost(/fragment\.com\/api/).reply((config) => {
+      body = String(config.data);
+      return [200, { ok: true, cur_price: PRICE_HTML }];
+    });
+    await client.stars.getPrice({ quantity: "100" });
+    expect(body).toContain("quantity=100");
+    expect(body).toContain("method=updateStarsPrices");
+  });
+
+  it("rejects a non-positive quantity", async () => {
+    const { client } = createClient();
+    const res = await client.stars.getPrice({ quantity: 0 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+
+  it("returns an API error when ok=false", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, { ok: false });
+    const res = await client.stars.getPrice({ quantity: 50 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("API");
+  });
+});
+
+describe("stars.initPayment", () => {
+  it("returns req_id and amount", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, { req_id: "abc123", amount: "0.2774" });
+    const data = expectOk(await client.stars.initPayment({ recipient: "R", quantity: 50 }));
+    expect(data.req_id).toBe("abc123");
+    expect(data.amount).toBe("0.2774");
+  });
+
+  it("validates the recipient", async () => {
+    const { client } = createClient();
+    const res = await client.stars.initPayment({ recipient: "", quantity: 50 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+
+  it("errors when no req_id is returned", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, { amount: "0" });
+    const res = await client.stars.initPayment({ recipient: "R", quantity: 50 });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("API");
+  });
+});
+
+describe("stars.getPaymentInfo", () => {
+  it("returns the transaction messages", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, {
+      ok: true,
+      transaction: {
+        messages: [{ address: "UQ...", amount: "277400000", payload: "te6..." }],
+      },
+    });
+    const data = expectOk(await client.stars.getPaymentInfo({ requestId: "abc123" }));
+    expect(data.transaction?.messages[0]?.address).toBe("UQ...");
+  });
+
+  it("errors when transaction is missing", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, { ok: false, error: "expired" });
+    const res = await client.stars.getPaymentInfo({ requestId: "abc123" });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.message).toContain("expired");
+  });
+});

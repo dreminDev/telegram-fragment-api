@@ -1,0 +1,28 @@
+# Source — only the compiled dist/ is published
+src/
+test/
+examples/
+coverage/
+node_modules/
+
+# Config
+tsconfig.json
+tsup.config.ts
+vitest.config.ts
+.gitignore
+.editorconfig
+
+# CI / meta
+.github/
+.vscode/
+.idea/
+
+# Docs that don't belong in the package
+PUBLISHING.md
+CHANGELOG.md
+
+# Misc
+*.log
+*.tgz
+.env
+.env.*
