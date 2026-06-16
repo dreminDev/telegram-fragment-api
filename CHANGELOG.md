@@ -4,6 +4,17 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-06-16
+
+### Changed
+
+- Documented that buying Stars is no longer possible programmatically: Fragment
+  moved Stars checkout to TON Connect (client-side transaction signed in the
+  wallet), and the legacy `initPayment` / `getPaymentInfo` endpoints now return
+  `Access denied`. The on-chain payment carries a server-issued `Ref#…` bound to
+  the recipient that Fragment no longer exposes via API. Pricing and every other
+  method are unaffected. Added notes to the README and method JSDoc.
+
 ## [0.1.2] - 2026-06-16
 
 ### Fixed

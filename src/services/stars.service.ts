@@ -65,6 +65,10 @@ export class StarsService extends BaseService {
   /**
    * Initialize a Stars purchase for a recipient.
    *
+   * ⚠️ **No longer functional.** Fragment moved Stars checkout to TON Connect and
+   * this legacy endpoint now responds with `Access denied`. Kept for
+   * completeness; see the README "client.stars" note. `getPrice` is unaffected.
+   *
    * @example
    * ```ts
    * const res = await client.stars.initPayment({ recipient, quantity: 50 });
@@ -100,6 +104,9 @@ export class StarsService extends BaseService {
   /**
    * Get the on-chain transaction details (address, amount, payload) for a Stars
    * purchase initialized with {@link StarsService.initPayment}.
+   *
+   * ⚠️ **No longer functional** — depends on {@link StarsService.initPayment},
+   * which Fragment has locked behind TON Connect (`Access denied`).
    */
   async getPaymentInfo({
     requestId,

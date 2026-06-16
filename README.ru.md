@@ -137,9 +137,16 @@ client.utils.decodePayload({ payload: "te6ccg..." });        // → { decoded } 
 
 ```ts
 await client.stars.getPrice({ quantity: 5050 });             // → { curPrice: { TON, USDT } }
-await client.stars.initPayment({ recipient, quantity: 50 }); // → { req_id, amount }
-await client.stars.getPaymentInfo({ requestId });            // → { transaction: { messages } }
+await client.stars.initPayment({ recipient, quantity: 50 }); // ⚠️ см. примечание ниже
+await client.stars.getPaymentInfo({ requestId });            // ⚠️ см. примечание ниже
 ```
+
+> ⚠️ **Покупка звёзд через API больше не работает.** Fragment перевёл оплату звёзд на
+> **TON Connect** — транзакция теперь собирается на стороне клиента и подписывается в
+> кошельке. `initPayment` / `getPaymentInfo` обращаются к старому API Fragment, который
+> теперь отдаёт `Access denied`. В оплате участвует серверный `Ref#…`, привязанный к
+> получателю, и Fragment его больше не отдаёт через API — поэтому платёж без него не
+> зачислит звёзды. **`getPrice` и все остальные методы работают.**
 
 ### `client.premium`
 
