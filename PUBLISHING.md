@@ -163,36 +163,35 @@ git push --follow-tags
 
 ---
 
-## 8. (Опционально) Автопубликация через GitHub Actions
+## 8. Автопубликация через GitHub Actions
 
-Чтобы пакет публиковался автоматически при создании git-тега `v*`:
+Workflow уже настроен в [`.github/workflows/publish.yml`](.github/workflows/publish.yml). Он
+запускается на **каждый push в `main`**, прогоняет `typecheck → test → build` и публикует
+пакет **только если версия в `package.json` новая** (если версию не подняли — шаг публикации
+просто пропускается, без ошибки).
 
-```yaml
-# .github/workflows/publish.yml
-name: Publish to npm
-on:
-  push:
-    tags: ["v*"]
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write   # для npm provenance
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          registry-url: "https://registry.npmjs.org"
-      - run: npm ci
-      - run: npm run build
-      - run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+### Разовая настройка (2 шага)
+
+**1. Создайте Automation-токен** на npm:
+npmjs.com → **Access Tokens** → **Generate New Token** → **Classic Token** → тип **Automation**.
+Automation-токены **обходят 2FA** — именно это нужно для CI (обычный/granular-токен без bypass
+выдаст `403`).
+
+**2. Добавьте токен в секреты репозитория:**
+GitHub → **Settings → Secrets and variables → Actions → New repository secret**
+→ имя `NPM_TOKEN`, значение — токен.
+
+### Как выпускать релиз после этого
+
+```bash
+npm version patch     # поднимет версию + создаст коммит и тег
+git push --follow-tags
 ```
 
-Добавьте `NPM_TOKEN` (Automation Token) в **Settings → Secrets → Actions** репозитория. Флаг `--provenance` добавит проверяемую метку происхождения пакета — npm покажет «зелёную галочку» о том, что пакет собран из этого репозитория.
+Push в `main` запустит workflow → он сам опубликует новую версию. Флаг `--provenance` добавит
+проверяемую метку происхождения (нужен **публичный** репозиторий; для приватного уберите флаг).
+
+> Можно запустить публикацию и вручную: вкладка **Actions** → **Publish to npm** → **Run workflow**.
 
 ---
 
