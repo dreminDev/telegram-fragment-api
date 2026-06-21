@@ -1,4 +1,10 @@
-import { Cell } from "@ton/core";
+import {
+  Cell,
+  beginCell,
+  external,
+  storeMessage,
+  storeStateInit,
+} from "@ton/core";
 import { mnemonicToPrivateKey } from "@ton/crypto";
 import { TonClient, WalletContractV4, fromNano, internal, toNano } from "@ton/ton";
 import { BaseService, type FragmentContext } from "../core/context.js";
@@ -12,6 +18,7 @@ import type {
   GetBalanceParams,
   SendTonData,
   SendTonParams,
+  TonConnectAccount,
   WalletAddress,
   WalletBalance,
 } from "../types.js";
@@ -113,7 +120,12 @@ export class V4R2Service extends BaseService {
       }
 
       const seqno = await contract.getSeqno();
-      await contract.sendTransfer({
+      // Sign the transfer body locally — we need the resulting cell separately
+      // so we can serialize the outer external message and capture its base64
+      // BoC. Fragment's `confirm_method` POST needs that BoC verbatim (see
+      // `StarsService.confirmPayment`); without it, the TON tx broadcasts but
+      // Fragment never credits the Stars.
+      const transferBody = wallet.createTransfer({
         secretKey: keyPair.secretKey,
         seqno,
         messages: [
@@ -126,12 +138,24 @@ export class V4R2Service extends BaseService {
         ],
       });
 
+      const externalCell = beginCell()
+        .store(
+          storeMessage(
+            external({ to: wallet.address, body: transferBody }),
+          ),
+        )
+        .endCell();
+      const boc = externalCell.toBoc().toString("base64");
+
+      await client.sendFile(externalCell.toBoc());
+
       return ok({
         destination: destinationAddress,
         amount: Number(fromNano(valueNano)),
         amountNano: valueNano.toString(),
         payload: payloadCell ?? payload,
         sender,
+        boc,
         balanceBefore: {
           nano: Number(balanceNano),
           ton: Number(fromNano(balanceNano)),
@@ -210,6 +234,50 @@ export class WalletService extends BaseService {
       return ok({
         friendly: wallet.address.toString(),
         raw: wallet.address.toRawString(),
+      });
+    } catch (e) {
+      return err(
+        new FragmentError("VALIDATION", "Invalid walletSeed.", { cause: e }),
+      );
+    }
+  }
+
+  /**
+   * Build the TON Connect-style account JSON Fragment expects in the
+   * post-broadcast confirm call (see {@link StarsService.confirmPayment}).
+   *
+   * The shape matches what `tonConnectUI.wallet.account` carries on
+   * fragment.com — raw address, hex public key, mainnet chain, and the BoC of
+   * the wallet's StateInit.
+   *
+   * @example
+   * ```ts
+   * const account = await client.ton.wallet.getAccount();
+   * if (account.ok) console.log(account.data.address);
+   * ```
+   */
+  async getAccount(): Promise<Result<TonConnectAccount>> {
+    const { walletSeed } = this.ctx.credentials;
+    if (!walletSeed) return err(validationError("walletSeed is not set."));
+    try {
+      const keyPair = await mnemonicToPrivateKey(walletSeed.trim().split(/\s+/));
+      const wallet = WalletContractV4.create({
+        workchain: 0,
+        publicKey: keyPair.publicKey,
+      });
+      const stateInitCell = beginCell()
+        .store(
+          storeStateInit({
+            code: wallet.init.code,
+            data: wallet.init.data,
+          }),
+        )
+        .endCell();
+      return ok({
+        address: wallet.address.toRawString(),
+        publicKey: keyPair.publicKey.toString("hex"),
+        chain: "-239",
+        walletStateInit: stateInitCell.toBoc().toString("base64"),
       });
     } catch (e) {
       return err(

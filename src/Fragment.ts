@@ -56,9 +56,9 @@ export class Fragment {
     this.auth = new AuthService(this.ctx);
     this.users = new UsersService(this.ctx);
     this.utils = new UtilsService(this.ctx);
-    this.stars = new StarsService(this.ctx);
     this.premium = new PremiumService(this.ctx);
     this.ton = new TonService(this.ctx);
+    this.stars = new StarsService(this.ctx, this.ton.wallet);
     this.account = new AccountService(this.ctx);
   }
 

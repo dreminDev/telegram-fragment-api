@@ -138,17 +138,26 @@ client.utils.toNano("0.4561");                               // → 456100000n (
 ### `client.stars`
 
 ```ts
-await client.stars.getPrice({ quantity: 5050 });             // → { curPrice: { TON, USDT } }
-await client.stars.initPayment({ recipient, quantity: 50 }); // → { req_id, amount }  (payment_method: "ton" по умолчанию)
-await client.stars.getPaymentInfo({ requestId });            // → { transaction: { messages } }
+await client.stars.getPrice({ quantity: 5050 });                            // → { curPrice: { TON, USDT } }
+await client.stars.purchase({ recipient, quantity: 50 });                   // → весь сценарий: init → getInfo → send → confirm
+await client.stars.initPayment({ recipient, quantity: 50 });                // → { req_id, amount }  (payment_method: "ton" по умолчанию)
+await client.stars.getPaymentInfo({ requestId });                           // → { transaction, confirm_method, confirm_params }
+await client.stars.confirmPayment({ method, params, account, boc, device }); // ← ОБЯЗАТЕЛЬНО после бродкаста (см. ниже)
 ```
 
-> 💡 **Что нужно для покупки звёзд.** `initPayment` шлёт `payment_method` (по умолчанию
-> `"ton"`) — Fragment **требует** его; без него будет `Access denied`. Также к аккаунту
-> Fragment должен быть **подключён TON-кошелёк** (иначе `initPayment` вернёт ошибку `AUTH`
-> с `need_ton`). Затем `getPaymentInfo` отдаёт ончейн-транзакцию
-> (`transaction.messages[0]` = `{ address, amount, payload }`), которую ты сам подписываешь
-> и отправляешь через `client.ton.wallet.v4r2.send(...)` — см. полный сценарий ниже.
+> ⚠️ **Stars зачисляются только после confirm-запроса.** Сайт Fragment не
+> останавливается на подписи TonConnect-перевода — после бродкаста он отдельно
+> постит `confirm_method` (из ответа `getBuyStarsLink`) с
+> `{account, device, boc, …confirm_params}`. Без этого вызова Fragment
+> **никогда не сопоставит ончейн-TON с твоим `req_id`**, и кошелёк спишет TON,
+> но получатель не увидит звёзды. Используй высокоуровневый
+> `client.stars.purchase({ recipient, quantity })` — он делает всё сам. Или
+> собери три шага вручную (см. полный сценарий ниже).
+>
+> 💡 **Что ещё нужно для покупки звёзд.** `initPayment` шлёт `payment_method`
+> (по умолчанию `"ton"`) — Fragment **требует** его; без него будет `Access denied`.
+> К аккаунту Fragment должен быть **подключён TON-кошелёк** (иначе `initPayment`
+> вернёт ошибку `AUTH` с `need_ton`).
 
 ### `client.premium`
 
@@ -162,6 +171,7 @@ if (res.ok) console.log(res.data.tonRate, res.data.options);
 ```ts
 await client.ton.getRandomLiteServer();                          // → { ip_readable, port }
 await client.ton.wallet.getAddress();                            // → { friendly, raw }  (из walletSeed, без сети)
+await client.ton.wallet.getAccount();                            // → { address, publicKey, chain, walletStateInit }  (TonConnect-JSON, без сети)
 await client.ton.wallet.getBalance({ address: "UQ..." });        // → { nano, ton, source }
 
 // сумму можно в TON …
@@ -172,13 +182,14 @@ await client.ton.wallet.v4r2.send({
   destinationAddress: msg.address,
   amountNano: msg.amount,                // точные нанотоны, без округлений
   payloadCell: msg.payload,              // точная BoC-ячейка (байт-в-байт как сайт)
-});                                       // → { sender, amount, amountNano, balanceBefore }
+});                                       // → { sender, amount, amountNano, boc, balanceBefore }
 ```
 
 > 💡 Для платежей Stars/Fragment используй **`amountNano`** + **`payloadCell`** (оба прямо
 > из `getPaymentInfo`). `amountNano` убирает float-баг с `/1e9`; `payloadCell` шлёт
 > **точную** ячейку Fragment — пере-кодированный текст-комментарий (`payload`) может не
-> совпасть байт-в-байт, и тогда Fragment **не зачислит** звёзды, хотя TON спишется.
+> совпасть байт-в-байт. Поле `boc` в ответе — это BoC внешнего сообщения, отправленного
+> в сеть; передай его как есть в `stars.confirmPayment(...)`, чтобы Fragment зачислил Stars.
 
 ### `client.account`
 
@@ -196,6 +207,8 @@ await client.auth.fetchHash({ url: ".../stars" });   // с конкретной 
 
 ## 🔗 Полный сценарий: покупка Stars от и до
 
+### В один вызов (рекомендуется)
+
 ```ts
 import { Fragment } from "telegram-fragment-api";
 
@@ -211,24 +224,49 @@ const client = new Fragment({
 const user = await client.users.nickToHash({ nickname: "maksim_dremin" });
 if (!user.ok) throw new Error(user.error.message);
 
-const init = await client.stars.initPayment({
+const res = await client.stars.purchase({
   recipient: user.data.found!.recipient,
   quantity: 50,
 });
+console.log(res.ok ? `Отправлено ✅ req=${res.data.reqId}` : res.error.message);
+```
+
+`purchase()` делает все четыре реальных шага: `initBuyStarsRequest` →
+`getBuyStarsLink` → `wallet.v4r2.send` → POST `confirm_method`. **Именно
+последний шаг чаще всего упускают** — без него TON списывается, а звёзды не
+приходят.
+
+### Вручную, по шагам
+
+Бери этот вариант, если нужны промежуточные результаты (логировать ончейн-хеш,
+ждать подтверждения пользователя или ретраить только confirm):
+
+```ts
+const init = await client.stars.initPayment({ recipient, quantity: 50 });
 if (!init.ok) throw new Error(init.error.message);
 
 const info = await client.stars.getPaymentInfo({ requestId: init.data.req_id });
 if (!info.ok) throw new Error(info.error.message);
 
 const msg = info.data.transaction!.messages[0]!;
+const account = await client.ton.wallet.getAccount();
+if (!account.ok) throw new Error(account.error.message);
 
 const tx = await client.ton.wallet.v4r2.send({
   destinationAddress: msg.address,
   amountNano: msg.amount,        // точные нанотоны
   payloadCell: msg.payload,      // точная BoC-ячейка — байт-в-байт как сайт
 });
+if (!tx.ok) throw new Error(tx.error.message);
 
-console.log(tx.ok ? "Отправлено ✅" : `Ошибка: ${tx.error.message}`);
+// ⚠️ Обязательный шаг — без него Fragment не зачислит звёзды.
+const confirm = await client.stars.confirmPayment({
+  method: info.data.confirm_method!,
+  params: info.data.confirm_params,
+  account: account.data,
+  boc: tx.data.boc,
+});
+console.log(confirm.ok ? "Звёзды зачислены ✅" : confirm.error.message);
 ```
 
 > `initPayment` сам синхронизирует курс TON и ретраит при `Price was changed`,

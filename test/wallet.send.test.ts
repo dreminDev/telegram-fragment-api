@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mutable mock state shared with the hoisted module mocks.
 const h = vi.hoisted(() => ({
   balanceNano: 5_000_000_000n, // 5 TON
-  sendTransfer: vi.fn(async () => undefined),
+  sendFile: vi.fn(async () => undefined),
   getSeqno: vi.fn(async () => 7),
   internal: vi.fn((args: unknown) => args),
+  createTransfer: vi.fn(() => ({ _kind: "signed-body" })),
 }));
 
 vi.mock("@ton/crypto", () => ({
@@ -15,13 +16,34 @@ vi.mock("@ton/crypto", () => ({
   })),
 }));
 
+vi.mock("@ton/core", () => {
+  const fakeCell = {
+    toBoc: () => Buffer.from("fake-boc-bytes"),
+  };
+  return {
+    Cell: {
+      fromBase64: vi.fn((s: string) => {
+        if (!s.startsWith("te6")) throw new Error("invalid boc");
+        return { _kind: "decoded-boc" };
+      }),
+    },
+    beginCell: vi.fn(() => ({
+      store: vi.fn().mockReturnThis(),
+      endCell: vi.fn(() => fakeCell),
+    })),
+    external: vi.fn((args: unknown) => args),
+    storeMessage: vi.fn(),
+    storeStateInit: vi.fn(),
+  };
+});
+
 vi.mock("@ton/ton", () => ({
   TonClient: vi.fn().mockImplementation(() => ({
     open: () => ({
       getBalance: async () => h.balanceNano,
       getSeqno: h.getSeqno,
-      sendTransfer: h.sendTransfer,
     }),
+    sendFile: h.sendFile,
   })),
   WalletContractV4: {
     create: vi.fn(() => ({
@@ -29,6 +51,8 @@ vi.mock("@ton/ton", () => ({
         toString: () => "EQAsender_addr",
         toRawString: () => "0:sender_raw",
       },
+      init: { code: { _kind: "code" }, data: { _kind: "data" } },
+      createTransfer: h.createTransfer,
     })),
   },
   internal: h.internal,
@@ -48,7 +72,8 @@ function fundedClient() {
 describe("ton.wallet.v4r2.send", () => {
   beforeEach(() => {
     h.balanceNano = 5_000_000_000n;
-    h.sendTransfer.mockClear();
+    h.sendFile.mockClear();
+    h.createTransfer.mockClear();
     h.internal.mockClear();
   });
 
@@ -67,7 +92,8 @@ describe("ton.wallet.v4r2.send", () => {
       expect(res.data.amount).toBe(0.21);
       expect(res.data.balanceBefore.ton).toBe(5);
     }
-    expect(h.sendTransfer).toHaveBeenCalledOnce();
+    expect(h.sendFile).toHaveBeenCalledOnce();
+    expect(h.createTransfer).toHaveBeenCalledOnce();
     // the comment payload is forwarded to internal()
     expect(h.internal).toHaveBeenCalledWith(
       expect.objectContaining({ to: "UQdest", body: "50 Telegram Stars", bounce: false }),
@@ -146,7 +172,7 @@ describe("ton.wallet.v4r2.send", () => {
     });
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("INSUFFICIENT_FUNDS");
-    expect(h.sendTransfer).not.toHaveBeenCalled();
+    expect(h.sendFile).not.toHaveBeenCalled();
   });
 
   it("validates the destination address", async () => {
@@ -206,5 +232,42 @@ describe("ton.wallet.getAddress", () => {
     const res = await client.ton.wallet.getAddress();
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+});
+
+describe("ton.wallet.getAccount", () => {
+  it("derives the TonConnect account JSON from the seed", async () => {
+    const client = fundedClient();
+    const res = await client.ton.wallet.getAccount();
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(res.data.address).toBe("0:sender_raw");
+      expect(res.data.chain).toBe("-239");
+      expect(res.data.publicKey).toBe("01".repeat(32));
+      expect(typeof res.data.walletStateInit).toBe("string");
+      expect(res.data.walletStateInit.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("requires a wallet seed", async () => {
+    const client = new Fragment({ toncenterApiKey: "tc" });
+    const res = await client.ton.wallet.getAccount();
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
+});
+
+describe("ton.wallet.v4r2.send — boc capture", () => {
+  it("returns the external-message boc alongside the tx data", async () => {
+    const client = fundedClient();
+    const res = await client.ton.wallet.v4r2.send({
+      destinationAddress: "UQdest",
+      amount: 0.21,
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      expect(typeof res.data.boc).toBe("string");
+      expect(res.data.boc.length).toBeGreaterThan(0);
+    }
   });
 });

@@ -1,22 +1,50 @@
-import { BaseService } from "../core/context.js";
+import { BaseService, type FragmentContext } from "../core/context.js";
 import { FragmentError, apiError, validationError } from "../core/errors.js";
 import { err, ok, type Result } from "../core/result.js";
 import type {
+  ConfirmStarsPaymentData,
+  ConfirmStarsPaymentParams,
   GetPaymentInfoParams,
   GetStarsPriceParams,
   InitStarsPaymentParams,
   PaymentInfo,
   PaymentInit,
+  PurchaseStarsData,
+  PurchaseStarsParams,
   StarsPrice,
+  TonConnectDevice,
 } from "../types.js";
+import { WalletService } from "./wallet.service.js";
 
 interface RawPriceResponse {
   ok?: boolean;
   cur_price?: string;
 }
 
+/**
+ * Default TonConnect device hint sent with the confirm call. Fragment doesn't
+ * verify the contents, but the field must be present and well-formed JSON.
+ */
+const DEFAULT_DEVICE: TonConnectDevice = {
+  platform: "windows",
+  appName: "tonkeeper",
+  appVersion: "4.10.0",
+  maxProtocolVersion: 2,
+  features: [
+    "SendTransaction",
+    { name: "SendTransaction", maxMessages: 4 },
+    { name: "SignData", types: ["text", "binary", "cell"] },
+  ],
+};
+
 /** Telegram Stars: pricing and the purchase flow. */
 export class StarsService extends BaseService {
+  private readonly wallet: WalletService;
+
+  constructor(ctx: FragmentContext, wallet: WalletService) {
+    super(ctx);
+    this.wallet = wallet;
+  }
   /**
    * Get the current price for a given quantity of Telegram Stars.
    *
@@ -195,5 +223,155 @@ export class StarsService extends BaseService {
       );
     }
     return ok(res.data);
+  }
+
+  /**
+   * Tell Fragment that a Stars TON payment has been broadcast.
+   *
+   * The website does this automatically after TonConnect signs the transfer
+   * (see `Wallet.sendTransaction` in `auction.js`). It POSTs the `confirm_method`
+   * returned by {@link getPaymentInfo} with `{account, device, boc, ...confirm_params}`.
+   * **Without this call Fragment never matches the on-chain TON to the order**,
+   * so Stars are not credited — even though the TON debits successfully.
+   *
+   * @example
+   * ```ts
+   * const tx = await client.ton.wallet.v4r2.send({ ... });
+   * const account = await client.ton.wallet.getAccount();
+   * if (tx.ok && account.ok) {
+   *   await client.stars.confirmPayment({
+   *     method: info.data.confirm_method!,
+   *     params: info.data.confirm_params,
+   *     account: account.data,
+   *     boc: tx.data.boc,
+   *   });
+   * }
+   * ```
+   */
+  async confirmPayment({
+    method,
+    params = {},
+    account,
+    device = DEFAULT_DEVICE,
+    boc,
+  }: ConfirmStarsPaymentParams): Promise<Result<ConfirmStarsPaymentData>> {
+    if (typeof method !== "string" || method.length === 0) {
+      return err(validationError("`method` must be a non-empty string."));
+    }
+    if (typeof boc !== "string" || boc.length === 0) {
+      return err(validationError("`boc` must be a non-empty string."));
+    }
+    if (!account || typeof account.address !== "string") {
+      return err(validationError("`account` is required."));
+    }
+
+    const body: Record<string, string | number> = {
+      account: JSON.stringify(account),
+      device: JSON.stringify(device),
+      boc,
+    };
+    for (const [k, v] of Object.entries(params)) {
+      if (v === undefined || v === null) continue;
+      body[k] = typeof v === "object" ? JSON.stringify(v) : String(v);
+    }
+    body.method = method;
+
+    const res = await this.ctx.http.postForm<ConfirmStarsPaymentData>(
+      this.ctx.apiUrl(),
+      body,
+      { headers: this.ctx.apiHeaders() },
+    );
+    if (!res.ok) return res;
+
+    if (res.data && res.data.ok === false) {
+      const raw = res.data as unknown as { error?: unknown };
+      const errMsg =
+        typeof raw.error === "string"
+          ? raw.error
+          : "Fragment did not credit the Stars purchase.";
+      return err(apiError(errMsg, { details: res.data }));
+    }
+    return ok(res.data ?? { ok: true });
+  }
+
+  /**
+   * High-level Stars purchase — runs the full Fragment flow end-to-end:
+   * `initBuyStarsRequest` → `getBuyStarsLink` → broadcast TON → `confirm_method`.
+   *
+   * Requires `walletSeed` and `toncenterApiKey` in addition to the usual
+   * `stel_*` cookies + `hash`.
+   *
+   * @example
+   * ```ts
+   * const user = await client.users.nickToHash({ nickname: "maksim_dremin" });
+   * if (!user.ok) return;
+   * const res = await client.stars.purchase({
+   *   recipient: user.data.found!.recipient,
+   *   quantity: 50,
+   * });
+   * if (res.ok) console.log("Stars sent:", res.data.amount, "TON, req", res.data.reqId);
+   * ```
+   */
+  async purchase({
+    recipient,
+    quantity,
+    showSender = false,
+    device,
+  }: PurchaseStarsParams): Promise<Result<PurchaseStarsData>> {
+    const init = await this.initPayment({ recipient, quantity });
+    if (!init.ok) return init;
+
+    const info = await this.getPaymentInfo({
+      requestId: init.data.req_id,
+      showSender,
+    });
+    if (!info.ok) return info;
+
+    const message = info.data.transaction?.messages[0];
+    if (!message) {
+      return err(
+        apiError("Fragment returned no transaction message.", {
+          details: info.data,
+        }),
+      );
+    }
+
+    const account = await this.wallet.getAccount();
+    if (!account.ok) return account;
+
+    const tx = await this.wallet.v4r2.send({
+      destinationAddress: message.address,
+      amountNano: message.amount,
+      payloadCell: message.payload,
+    });
+    if (!tx.ok) return tx;
+
+    if (!info.data.confirm_method) {
+      return err(
+        apiError(
+          "Fragment did not return a `confirm_method` — cannot credit Stars without it.",
+          { details: info.data },
+        ),
+      );
+    }
+
+    const confirm = await this.confirmPayment({
+      method: info.data.confirm_method,
+      params: info.data.confirm_params,
+      account: account.data,
+      device,
+      boc: tx.data.boc,
+    });
+    if (!confirm.ok) return confirm;
+
+    return ok({
+      reqId: init.data.req_id,
+      amount: tx.data.amount,
+      amountNano: tx.data.amountNano,
+      destination: tx.data.destination,
+      sender: tx.data.sender,
+      boc: tx.data.boc,
+      confirm: confirm.data,
+    });
   }
 }

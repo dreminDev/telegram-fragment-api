@@ -122,10 +122,93 @@ export interface PaymentInfo {
     from?: string;
     messages: PaymentMessage[];
   };
+  /**
+   * Fragment-side method that **must** be POSTed after the TON transfer lands,
+   * carrying `{account, device, boc, ...confirm_params}`. Without this final
+   * call Fragment never matches the on-chain payment to the `req_id`, so Stars
+   * are not credited — even though the TON debits successfully.
+   */
+  confirm_method?: string;
+  /** Extra fields Fragment expects in the {@link confirm_method} POST. */
+  confirm_params?: Record<string, unknown>;
   /** Set by Fragment when the purchase needs extra verification. */
   need_verify?: boolean;
   error?: string;
   [key: string]: unknown;
+}
+
+/**
+ * TON Connect-style account JSON Fragment expects in the post-broadcast confirm
+ * call. Build with {@link WalletService.getAccount} from your `walletSeed`.
+ */
+export interface TonConnectAccount {
+  /** Raw address, e.g. `0:00b9fa57...`. */
+  address: string;
+  /** Public key in hex (no `0x` prefix). */
+  publicKey: string;
+  /** `"-239"` for mainnet, `"-3"` for testnet. */
+  chain: string;
+  /** Base64 BoC of the wallet's StateInit cell. */
+  walletStateInit: string;
+}
+
+/**
+ * TON Connect-style device JSON sent alongside {@link TonConnectAccount}.
+ * Fragment doesn't verify the contents, so a hardcoded "Tonkeeper" hint is
+ * enough.
+ */
+export interface TonConnectDevice {
+  platform: string;
+  appName: string;
+  appVersion: string;
+  maxProtocolVersion: number;
+  features: unknown[];
+}
+
+export interface ConfirmStarsPaymentParams {
+  /** `confirm_method` returned by {@link StarsService.getPaymentInfo}. */
+  method: string;
+  /** `confirm_params` returned by {@link StarsService.getPaymentInfo}. */
+  params?: Record<string, unknown>;
+  /** TonConnect account JSON for the wallet that paid. */
+  account: TonConnectAccount;
+  /** Base64 BoC of the external message that was broadcast on-chain. */
+  boc: string;
+  /** Optional device override; a default Tonkeeper hint is used otherwise. */
+  device?: TonConnectDevice;
+}
+
+export interface ConfirmStarsPaymentData {
+  ok: boolean;
+  [key: string]: unknown;
+}
+
+export interface PurchaseStarsParams {
+  /** Recipient hash (from {@link NickToHashData}). */
+  recipient: string;
+  /** Amount of stars to buy. */
+  quantity: number;
+  /** Whether to reveal the sender's name to the recipient. Defaults to `false`. */
+  showSender?: boolean;
+  /** Optional device override; a default Tonkeeper hint is used otherwise. */
+  device?: TonConnectDevice;
+}
+
+export interface PurchaseStarsData {
+  /** The `req_id` of the matched Fragment order. */
+  reqId: string;
+  /** TON amount sent, in human form (e.g. `0.4561`). */
+  amount: number;
+  /** TON amount sent, in exact nanoTON. */
+  amountNano: string;
+  /** Destination address (Fragment's collector wallet). */
+  destination: string;
+  /** Sender wallet (derived from {@link FragmentCredentials.walletSeed}). */
+  sender: string;
+  /** Base64 BoC of the external message that was broadcast and confirmed. */
+  boc: string;
+  /** Raw response from Fragment's confirm call. */
+  confirm: ConfirmStarsPaymentData;
 }
 
 // ==================== PREMIUM ====================
@@ -216,6 +299,12 @@ export interface SendTonData {
   payload: string;
   /** Sender wallet address. */
   sender: string;
+  /**
+   * Base64 BoC of the external message that was broadcast — pass this verbatim
+   * as `boc` to {@link StarsService.confirmPayment}. Fragment matches Stars
+   * orders by this BoC, so it must come from the same signed message we sent.
+   */
+  boc: string;
   balanceBefore: {
     nano: number;
     ton: number;

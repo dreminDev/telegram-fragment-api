@@ -47,7 +47,12 @@ async function main(): Promise<void> {
     }
   }
 
-  // 5. Full purchase flow
+  // 5a. High-level — full Stars flow in one call (init → getInfo → send TON →
+  // POST Fragment's `confirm_method`). Uncomment to actually buy:
+  // const purchase = await client.stars.purchase({ recipient, quantity: 50 });
+  // console.log(purchase.ok ? purchase.data : purchase.error);
+
+  // 5b. Or the same flow split into steps, when you need each result:
   const init = await client.stars.initPayment({ recipient, quantity: 50 });
   if (!init.ok) return;
 
@@ -58,13 +63,24 @@ async function main(): Promise<void> {
   const decoded = client.utils.decodePayload({ payload: message.payload });
   if (decoded.ok) console.log("Decoded payload:", decoded.data.decoded);
 
-  // Uncomment to actually send TON (spends real funds):
+  // Uncomment to actually send TON (spends real funds). After broadcasting
+  // you MUST call `confirmPayment` — Fragment only credits Stars once it
+  // matches the on-chain BoC to the order.
+  // const account = await client.ton.wallet.getAccount();
   // const tx = await client.ton.wallet.v4r2.send({
   //   destinationAddress: message.address,
   //   amountNano: message.amount,   // exact nanoTON straight from Fragment — no /1e9
   //   payloadCell: message.payload, // exact BoC cell — byte-matches the website
   // });
-  // console.log(tx.ok ? tx.data : tx.error);
+  // if (account.ok && tx.ok && info.data.confirm_method) {
+  //   const confirm = await client.stars.confirmPayment({
+  //     method: info.data.confirm_method,
+  //     params: info.data.confirm_params,
+  //     account: account.data,
+  //     boc: tx.data.boc,
+  //   });
+  //   console.log(confirm.ok ? confirm.data : confirm.error);
+  // }
 }
 
 main().catch(console.error);

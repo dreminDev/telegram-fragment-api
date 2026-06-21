@@ -165,4 +165,81 @@ describe("stars.getPaymentInfo", () => {
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error.message).toContain("expired");
   });
+
+  it("surfaces confirm_method and confirm_params from Fragment", async () => {
+    const { client, mock } = createClient();
+    mock.onPost(/fragment\.com\/api/).reply(200, {
+      ok: true,
+      transaction: { messages: [{ address: "UQ...", amount: "1", payload: "p" }] },
+      confirm_method: "confirmReq",
+      confirm_params: { id: "abc", req_hash: "deadbeef" },
+    });
+    const data = expectOk(await client.stars.getPaymentInfo({ requestId: "abc" }));
+    expect(data.confirm_method).toBe("confirmReq");
+    expect(data.confirm_params).toEqual({ id: "abc", req_hash: "deadbeef" });
+  });
+});
+
+describe("stars.confirmPayment", () => {
+  const account = {
+    address: "0:00b9fa57",
+    publicKey: "01".repeat(32),
+    chain: "-239",
+    walletStateInit: "te6cck=",
+  };
+
+  it("POSTs method, account, device, boc and confirm_params", async () => {
+    const { client, mock } = createClient();
+    let body = "";
+    mock.onPost(/fragment\.com\/api/).reply((config) => {
+      body = String(config.data);
+      return [200, { ok: true }];
+    });
+
+    const data = expectOk(
+      await client.stars.confirmPayment({
+        method: "confirmReq",
+        params: { id: "abc123", req_hash: "deadbeef" },
+        account,
+        boc: "te6ccgEBAQEA",
+      }),
+    );
+    expect(data.ok).toBe(true);
+    expect(body).toContain("method=confirmReq");
+    expect(body).toContain("boc=");
+    expect(body).toContain("id=abc123");
+    expect(body).toContain("req_hash=deadbeef");
+    // account / device are JSON-encoded
+    expect(decodeURIComponent(body)).toContain(`"address":"0:00b9fa57"`);
+    expect(decodeURIComponent(body)).toContain(`"appName":"tonkeeper"`);
+  });
+
+  it("maps Fragment's ok=false into an API error", async () => {
+    const { client, mock } = createClient();
+    mock
+      .onPost(/fragment\.com\/api/)
+      .reply(200, { ok: false, error: "Order not found" });
+
+    const res = await client.stars.confirmPayment({
+      method: "confirmReq",
+      account,
+      boc: "te6ccgEBAQEA",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error.code).toBe("API");
+      expect(res.error.message).toContain("Order not found");
+    }
+  });
+
+  it("validates required fields", async () => {
+    const { client } = createClient();
+    const res = await client.stars.confirmPayment({
+      method: "",
+      account,
+      boc: "te6",
+    });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error.code).toBe("VALIDATION");
+  });
 });

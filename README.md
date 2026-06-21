@@ -138,17 +138,25 @@ client.utils.toNano("0.4561");                               // → 456100000n (
 ### `client.stars`
 
 ```ts
-await client.stars.getPrice({ quantity: 5050 });             // → { curPrice: { TON, USDT } }
-await client.stars.initPayment({ recipient, quantity: 50 }); // → { req_id, amount }  (payment_method: "ton" by default)
-await client.stars.getPaymentInfo({ requestId });            // → { transaction: { messages } }
+await client.stars.getPrice({ quantity: 5050 });                            // → { curPrice: { TON, USDT } }
+await client.stars.purchase({ recipient, quantity: 50 });                   // → end-to-end: init → getInfo → send → confirm
+await client.stars.initPayment({ recipient, quantity: 50 });                // → { req_id, amount }  (payment_method: "ton" by default)
+await client.stars.getPaymentInfo({ requestId });                           // → { transaction, confirm_method, confirm_params }
+await client.stars.confirmPayment({ method, params, account, boc, device }); // ← REQUIRED after broadcast (see below)
 ```
 
-> 💡 **Buying Stars requirements.** `initPayment` sends `payment_method` (default `"ton"`)
-> — Fragment **requires** it; without it you get `Access denied`. The Fragment account
-> must also have a **TON wallet connected** (otherwise `initPayment` returns an `AUTH`
-> error with `need_ton`). `getPaymentInfo` then returns the on-chain transaction
-> (`transaction.messages[0]` = `{ address, amount, payload }`), which you sign and
-> broadcast yourself with `client.ton.wallet.v4r2.send(...)` — see the full workflow below.
+> ⚠️ **Stars are credited only after the confirm POST.** Fragment's website
+> doesn't stop at signing the TonConnect transfer — it then POSTs the
+> `confirm_method` returned by `getBuyStarsLink` with `{account, device, boc, …confirm_params}`.
+> Without that call Fragment **never matches the on-chain TON to your `req_id`**,
+> so the wallet debits but the recipient gets no Stars. Use the high-level
+> `client.stars.purchase({ recipient, quantity })` and you don't have to think
+> about it — or assemble the three steps yourself (see the full workflow below).
+>
+> 💡 **Buying Stars requirements.** `initPayment` sends `payment_method` (default
+> `"ton"`) — Fragment **requires** it; without it you get `Access denied`. The
+> Fragment account must also have a **TON wallet connected** (otherwise
+> `initPayment` returns an `AUTH` error with `need_ton`).
 
 ### `client.premium`
 
@@ -162,6 +170,7 @@ if (res.ok) console.log(res.data.tonRate, res.data.options);
 ```ts
 await client.ton.getRandomLiteServer();                          // → { ip_readable, port }
 await client.ton.wallet.getAddress();                            // → { friendly, raw }  (from walletSeed, no network)
+await client.ton.wallet.getAccount();                            // → { address, publicKey, chain, walletStateInit }  (TonConnect JSON, no network)
 await client.ton.wallet.getBalance({ address: "UQ..." });        // → { nano, ton, source }
 
 // pass a human amount in TON …
@@ -172,13 +181,14 @@ await client.ton.wallet.v4r2.send({
   destinationAddress: msg.address,
   amountNano: msg.amount,                // exact nanoTON, no rounding
   payloadCell: msg.payload,              // exact BoC cell (byte-matches the website)
-});                                       // → { sender, amount, amountNano, balanceBefore }
+});                                       // → { sender, amount, amountNano, boc, balanceBefore }
 ```
 
 > 💡 For Stars/Fragment payments use **`amountNano`** + **`payloadCell`** (both straight
 > from `getPaymentInfo`). `amountNano` avoids the `/1e9` float footgun; `payloadCell`
 > sends Fragment's **exact** payload cell — a re-encoded text comment (`payload`) may not
-> byte-match, and then Fragment won't credit the Stars even though the TON is spent.
+> byte-match. The `boc` field in the result is the broadcast external-message BoC —
+> pass it verbatim to `stars.confirmPayment(...)` (see below) so Fragment credits the Stars.
 
 ### `client.account`
 
@@ -196,6 +206,8 @@ await client.auth.fetchHash({ url: ".../stars" });   // from a specific page
 
 ## 🔗 Full workflow: buy Stars end-to-end
 
+### One-shot (recommended)
+
 ```ts
 import { Fragment } from "telegram-fragment-api";
 
@@ -211,24 +223,48 @@ const client = new Fragment({
 const user = await client.users.nickToHash({ nickname: "maksim_dremin" });
 if (!user.ok) throw new Error(user.error.message);
 
-const init = await client.stars.initPayment({
+const res = await client.stars.purchase({
   recipient: user.data.found!.recipient,
   quantity: 50,
 });
+console.log(res.ok ? `Sent ✅ req=${res.data.reqId}` : res.error.message);
+```
+
+`purchase()` runs all four real steps: `initBuyStarsRequest` → `getBuyStarsLink`
+→ `wallet.v4r2.send` → `confirm_method` POST. **The last step is the one most
+implementations get wrong** — skip it and the TON debits but Stars never arrive.
+
+### Manual, step-by-step
+
+Use this when you need each intermediate result (e.g. to log the on-chain hash, ask
+the user to confirm, or retry only the confirm leg):
+
+```ts
+const init = await client.stars.initPayment({ recipient, quantity: 50 });
 if (!init.ok) throw new Error(init.error.message);
 
 const info = await client.stars.getPaymentInfo({ requestId: init.data.req_id });
 if (!info.ok) throw new Error(info.error.message);
 
 const msg = info.data.transaction!.messages[0]!;
+const account = await client.ton.wallet.getAccount();
+if (!account.ok) throw new Error(account.error.message);
 
 const tx = await client.ton.wallet.v4r2.send({
   destinationAddress: msg.address,
   amountNano: msg.amount,        // exact nanoTON — no conversion
   payloadCell: msg.payload,      // exact BoC cell — byte-matches the website
 });
+if (!tx.ok) throw new Error(tx.error.message);
 
-console.log(tx.ok ? "Sent ✅" : `Failed: ${tx.error.message}`);
+// ⚠️ Required — without this Fragment never credits the Stars.
+const confirm = await client.stars.confirmPayment({
+  method: info.data.confirm_method!,
+  params: info.data.confirm_params,
+  account: account.data,
+  boc: tx.data.boc,
+});
+console.log(confirm.ok ? "Stars credited ✅" : confirm.error.message);
 ```
 
 > `initPayment` syncs the (volatile) TON price internally and retries on
