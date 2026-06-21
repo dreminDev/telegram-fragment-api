@@ -4,6 +4,34 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-06-21
+
+### Fixed
+
+- **Stars are finally credited after broadcast.** Reverse-engineering current
+  `auction.js?107` revealed a third step the previous implementations skipped:
+  after TonConnect signs and broadcasts the TON transfer, the website POSTs the
+  `confirm_method` returned by `getBuyStarsLink` with `{account, device, boc,
+  ...confirm_params}`. Without that call Fragment **never matches the on-chain
+  payment to the `req_id`**, so TON debits but Stars never arrive. The new
+  `stars.confirmPayment(...)` performs that final POST; `stars.purchase(...)`
+  runs the whole flow end-to-end.
+
+### Added
+
+- `client.stars.purchase({ recipient, quantity, showSender? })` — high-level
+  Stars purchase. Internally: `initBuyStarsRequest` → `getBuyStarsLink` →
+  `wallet.v4r2.send` → `confirm_method`.
+- `client.stars.confirmPayment({ method, params, account, boc, device? })` —
+  low-level confirm POST when you orchestrate the steps yourself.
+- `client.ton.wallet.getAccount()` — TON Connect-style account JSON
+  (`{address, publicKey, chain, walletStateInit}`) Fragment expects in the
+  confirm call.
+- `ton.wallet.v4r2.send` now returns `boc` — the base64 BoC of the broadcast
+  external message. Pass it verbatim to `confirmPayment`.
+- `PaymentInfo` carries `confirm_method` and `confirm_params` straight from
+  Fragment.
+
 ## [0.2.3] - 2026-06-16
 
 ### Added
